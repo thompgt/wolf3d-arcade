@@ -1,5 +1,6 @@
 build/
 shot.bmp
+selftest.txt
 *.o
 *.d
 *.exe

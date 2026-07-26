@@ -9,10 +9,17 @@
 #include "core/framebuffer.h"
 #include "game/game.h"
 #include "platform/win32_app.h"
+#include "selftest.h"
+
+#include <cstring>
 
 using namespace wolf;
 
-int main() {
+int main(int argc, char** argv) {
+    // Headless mode: no window, no input, just assertions on game logic.
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--selftest") == 0) return runSelfTest();
+
     Platform platform;
     if (!platform.init("Wolf3D Arcade")) return 1;
 
