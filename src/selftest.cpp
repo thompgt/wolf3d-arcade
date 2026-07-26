@@ -11,6 +11,7 @@
 #include "game/items.h"
 #include "game/map.h"
 #include "game/player.h"
+#include "game/weapons.h"
 #include "render/raycast.h"
 #include "render/sprites.h"
 
@@ -479,6 +480,250 @@ void testEnemies(Report& r) {
     }
 }
 
+// --- weapons -------------------------------------------------------------
+
+// Holds the trigger for a span of time. Weapons works out the press edge
+// itself, so a semi-automatic weapon held down here must still fire once.
+void holdTrigger(Weapons& w, Map& map, Player& p, Enemies& es,
+                 double seconds, ShotResult* last = nullptr) {
+    const int ticks = static_cast<int>(seconds / kTickDT);
+    for (int i = 0; i < ticks; ++i) {
+        const ShotResult s = w.update(kTickDT, true, map, p, es);
+        if (last && s.fired) *last = s;
+    }
+}
+
+// Presses and releases the trigger repeatedly, which is what a player does
+// with a semi-automatic. Holding it down instead fires exactly one round,
+// by design, so any test that wants a burst out of the pistol needs this.
+void pumpTrigger(Weapons& w, Map& map, Player& p, Enemies& es, double seconds) {
+    const int ticks = static_cast<int>(seconds / kTickDT);
+    for (int i = 0; i < ticks; ++i)
+        w.update(kTickDT, (i % 8) < 4, map, p, es);
+}
+
+// Rounds actually fired over a span, measured by ammo spent rather than by
+// counting calls: ammo is what the player feels.
+int shotsFired(Weapons& w, Map& map, Player& p, Enemies& es, double seconds) {
+    const int before = p.ammo();
+    holdTrigger(w, map, p, es, seconds);
+    return before - p.ammo();
+}
+
+void testWeapons(Report& r) {
+    r.section("weapon tuning");
+    {
+        const WeaponTuning& knife = tuningFor(WeaponType::Knife);
+        const WeaponTuning& pistol = tuningFor(WeaponType::Pistol);
+        const WeaponTuning& mg = tuningFor(WeaponType::MachineGun);
+        const WeaponTuning& cg = tuningFor(WeaponType::Chaingun);
+
+        // The four have to be distinct choices, not reskins.
+        r.check(cg.fireInterval < mg.fireInterval &&
+                mg.fireInterval < pistol.fireInterval,
+                "each firearm cycles faster than the last");
+        r.check(cg.spread > mg.spread && mg.spread > pistol.spread,
+                "and pays for it in accuracy");
+        r.check(knife.ammoUse == 0, "the knife costs no ammo");
+        r.check(knife.noiseRadius == 0.0, "and makes no noise");
+        r.check(knife.range < 2.0, "but only reaches arm's length");
+        r.check(!pistol.automatic && mg.automatic && cg.automatic,
+                "the pistol is semi-automatic and the rest are not");
+    }
+
+    r.section("weapon selection");
+    {
+        Player p; p.spawn(3.5, 8.5, 0.0);
+        Weapons w; w.reset();
+
+        r.check(w.current() == WeaponType::Pistol, "starts on the pistol");
+        r.check(w.owns(WeaponType::Knife, p), "the knife is always owned");
+        r.check(!w.owns(WeaponType::Chaingun, p), "the chaingun is not");
+
+        r.check(!w.select(WeaponType::Chaingun, p),
+                "cannot select a weapon you do not have");
+        r.check(w.current() == WeaponType::Pistol, "and the choice is unchanged");
+
+        p.giveChaingun();
+        r.check(w.select(WeaponType::Chaingun, p), "can once you pick it up");
+        r.check(w.current() == WeaponType::Chaingun, "and it is in your hands");
+    }
+    {
+        // An empty firearm is not a choice. The knife still is.
+        Player p; p.spawn(3.5, 8.5, 0.0);
+        Weapons w; w.reset();
+        p.useAmmo(p.ammo());
+
+        r.check(p.ammo() == 0, "player is out of ammo");
+        r.check(w.select(WeaponType::Knife, p), "the knife always answers");
+        r.check(!w.select(WeaponType::Pistol, p),
+                "an empty pistol cannot be selected");
+    }
+
+    r.section("ammo");
+    {
+        Player p; p.spawn(3.5, 8.5, 0.0);
+        const int start = p.ammo();
+        r.check(!p.useAmmo(start + 1), "cannot spend ammo you do not have");
+        r.check(p.ammo() == start, "and nothing is spent trying");
+        r.check(p.useAmmo(3) && p.ammo() == start - 3, "a spend is exact");
+    }
+
+    r.section("rate of fire");
+    {
+        // Facing the corridor guard at (35,11) from the east, so shots have
+        // something to hit and the geometry matches the enemy tests.
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        Player p; p.spawn(40.5, 11.5, 3.14159265358979323846);
+        p.giveAmmo(99);
+
+        Weapons w; w.reset();
+        const int pistolShots = shotsFired(w, m, p, es, 1.0);
+
+        Map m2 = Map::level1();
+        Enemies es2; es2.spawnFrom(m2);
+        Player p2; p2.spawn(40.5, 11.5, 3.14159265358979323846);
+        p2.giveAmmo(99);
+        p2.giveChaingun();
+        Weapons w2; w2.reset();
+        w2.select(WeaponType::Chaingun, p2);
+        const int chainShots = shotsFired(w2, m2, p2, es2, 1.0);
+
+        // Held for a full second, the pistol fires once and the chaingun
+        // empties into the corridor. That gap is the whole point of having
+        // both, and a semi-automatic that repeated on a held trigger would
+        // make the machine gun pointless.
+        r.check(pistolShots == 1, "a held pistol fires exactly once");
+        r.check(chainShots > 8, "a held chaingun keeps firing");
+    }
+
+    r.section("firing");
+    {
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+        const int fullHealth = es.all()[gi].health;
+
+        // Aimed west, straight down the corridor at him.
+        Player p; p.spawn(40.5, 11.5, 3.14159265358979323846);
+        p.giveAmmo(99);
+        Weapons w; w.reset();
+
+        ShotResult shot;
+        holdTrigger(w, m, p, es, 0.1, &shot);
+        r.check(shot.fired, "the pistol fires");
+        r.check(es.all()[gi].health < fullHealth, "and the guard is hit");
+
+        // Enough rounds to kill him, then confirm the score lands on the
+        // player rather than only being returned. Pumped, not held: a held
+        // pistol has already fired its one round above.
+        const int before = p.score();
+        pumpTrigger(w, m, p, es, 3.0);
+
+        r.check(es.all()[gi].state == EnemyState::Die ||
+                es.all()[gi].state == EnemyState::Dead,
+                "sustained fire kills him");
+        r.check(p.score() > before, "and the kill scores");
+    }
+    {
+        // A wall between you and a guard stops the round.
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+        const int fullHealth = es.all()[gi].health;
+
+        Player p; p.spawn(5.5, 8.5, 0.0);   // cell block, far side of a wall
+        p.giveAmmo(99);
+        Weapons w; w.reset();
+        holdTrigger(w, m, p, es, 2.0);
+
+        r.check(es.all()[gi].health == fullHealth,
+                "a wall stops the bullet");
+    }
+
+    r.section("dry firing");
+    {
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        Player p; p.spawn(40.5, 11.5, 3.14159265358979323846);
+        Weapons w; w.reset();
+        p.useAmmo(p.ammo());
+
+        const ShotResult s = w.update(kTickDT, true, m, p, es);
+        r.check(!s.fired, "an empty pistol does not fire");
+        r.check(s.dryFired, "and says so");
+        r.check(w.current() == WeaponType::Pistol,
+                "running dry does not silently swap weapons");
+        r.check(p.ammo() == 0, "and cannot go negative");
+    }
+    {
+        // The knife works with an empty pouch, which is the reason it is
+        // never taken away.
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+        const int fullHealth = es.all()[gi].health;
+
+        // Stood right next to him, inside knife reach.
+        Player p; p.spawn(es.all()[gi].x + 0.9, es.all()[gi].y, 3.14159265358979323846);
+        p.useAmmo(p.ammo());
+        Weapons w; w.reset();
+        w.select(WeaponType::Knife, p);
+
+        holdTrigger(w, m, p, es, 0.5);
+        r.check(es.all()[gi].health < fullHealth, "the knife cuts with no ammo");
+        r.check(p.ammo() == 0, "and spends none");
+    }
+
+    r.section("gunfire is heard");
+    {
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+
+        // Behind him, out of his cone: only the noise can wake him.
+        Player p; p.spawn(28.5, 11.5, 0.0);
+        p.giveAmmo(99);
+        Weapons w; w.reset();
+        holdTrigger(w, m, p, es, 0.1);
+
+        r.check(es.all()[gi].alerted || es.all()[gi].state == EnemyState::Chase,
+                "firing wakes a guard who never saw you");
+    }
+    {
+        // The knife is silent, which is what makes it worth carrying.
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+
+        Player p; p.spawn(28.5, 11.5, 0.0);
+        Weapons w; w.reset();
+        w.select(WeaponType::Knife, p);
+        holdTrigger(w, m, p, es, 0.5);
+
+        r.check(es.all()[gi].state != EnemyState::Chase,
+                "the knife does not give you away");
+    }
+
+    r.section("weapon determinism");
+    {
+        // Spread is random; the generator is seeded. Two identical runs must
+        // agree exactly or every check above is a coin flip.
+        auto run = []() {
+            Map m = Map::level1();
+            Enemies es; es.spawnFrom(m);
+            const int gi = enemyAt(es, 35, 11);
+            Player p; p.spawn(40.5, 11.5, 3.14159265358979323846);
+            p.giveAmmo(99);
+            Weapons w; w.reset();
+            pumpTrigger(w, m, p, es, 3.0);
+            return es.all()[gi].health;
+        };
+        r.check(run() == run(), "the same burst produces the same outcome");
+    }
+}
+
 } // namespace
 
 int runSelfTest() {
@@ -491,6 +736,7 @@ int runSelfTest() {
     testRays(r);
     testItems(r);
     testEnemies(r);
+    testWeapons(r);
 
     std::ostringstream out;
     out << "wolf3d-arcade self-test\n" << r.log.str() << "\n"
