@@ -12,6 +12,8 @@
 #include "game/map.h"
 #include "game/player.h"
 #include "game/weapons.h"
+#include "render/font.h"
+#include "render/hud.h"
 #include "render/raycast.h"
 #include "render/sprites.h"
 
@@ -759,6 +761,81 @@ void testWeapons(Report& r) {
     }
 }
 
+// --- HUD -----------------------------------------------------------------
+
+void testHud(Report& r) {
+    r.section("secret tally");
+    {
+        Map m = Map::level1();
+        r.check(m.secretsTotal() > 0, "the level has secrets to find");
+        r.check(m.secretsFound() == 0, "none are found to begin with");
+
+        m.use(39.5, 43.5, 1.0, 0.0, false, false);
+        r.check(m.secretsFound() == 1, "shoving one counts it");
+
+        // The count has to survive the secret settling. pushwalls_ drops it
+        // from the list once it stops moving, so a tally derived from that
+        // list would report the secret as un-found the moment it arrived.
+        step(m, 3.0, 39.5, 43.5);
+        r.check(m.pushwalls().empty(), "it has come to rest");
+        r.check(m.secretsFound() == 1, "and is still counted");
+    }
+
+    r.section("face portrait");
+    {
+        FaceSprites faces;
+        faces.generate();
+
+        // Identity comparison: distinct states must not resolve to the same
+        // frame, which is the only way the face carries information.
+        const Sprite* healthy = &faces.pick(100, 1, false, false);
+        const Sprite* hurt    = &faces.pick(10,  1, false, false);
+        const Sprite* dead    = &faces.pick(0,   1, false, false);
+
+        r.check(healthy != hurt, "a wounded face differs from a healthy one");
+        r.check(dead != healthy && dead != hurt, "and a dead one from both");
+
+        r.check(&faces.pick(100, 0, false, false) !=
+                &faces.pick(100, 2, false, false),
+                "looking left differs from looking right");
+
+        r.check(&faces.pick(100, 1, true, false) != healthy,
+                "a grimace differs from the idle face");
+        r.check(&faces.pick(100, 1, false, true) != healthy,
+                "so does a gloat");
+
+        // Being hit is the more urgent thing to report, and a face grinning
+        // through damage reads as a bug.
+        r.check(&faces.pick(100, 1, true, true) ==
+                &faces.pick(100, 1, true, false),
+                "a grimace outranks a gloat");
+
+        // Out-of-range input is clamped, not asserted: a wrong frame is
+        // cosmetic and a crash mid-firefight is not. Health above 100 clamps
+        // to the healthy tier and a glance of 9 clamps to the last one, so
+        // the result is the rightmost healthy face.
+        r.check(&faces.pick(999, 9, false, false) ==
+                &faces.pick(100, 2, false, false),
+                "out-of-range health and glance clamp");
+        r.check(&faces.pick(-50, 1, false, false) == dead,
+                "negative health reads as dead");
+    }
+
+    r.section("text metrics");
+    {
+        r.check(textWidth("") == 0, "empty text has no width");
+        r.check(textWidth("AB") == 2 * kGlyphW, "width scales with length");
+        r.check(textWidth("AB", 2) == 2 * 2 * kGlyphW, "and with scale");
+
+        // The status bar's widest fields have to fit the 320-pixel bar, and
+        // the layout is hand-budgeted -- so the budget is asserted rather
+        // than trusted.
+        r.check(textWidth("HEALTH") <= 48, "HEALTH fits its slot");
+        r.check(textWidth("PISTOL") <= 48, "so does the widest weapon name");
+        r.check(textWidth("100", 2) <= 48, "and full health at value size");
+    }
+}
+
 } // namespace
 
 int runSelfTest() {
@@ -772,6 +849,7 @@ int runSelfTest() {
     testItems(r);
     testEnemies(r);
     testWeapons(r);
+    testHud(r);
 
     std::ostringstream out;
     out << "wolf3d-arcade self-test\n" << r.log.str() << "\n"
