@@ -27,6 +27,18 @@ constexpr bool isTransparent(uint32_t c) { return (c & 0xFF000000u) != 0; }
 // the darker side-wall tint that gives flat walls their sense of volume.
 uint32_t shade(uint32_t color, double factor);
 
+class Framebuffer;
+
+// Lerps the top `rows` scanlines toward (r, g, b) by `t`. This is the whole
+// mechanism behind the muzzle flash and the damage and pickup washes — the
+// original shifted the hardware palette, and against a fixed 32-bit buffer
+// blending toward a colour is the same effect by the only means available.
+//
+// A lerp, not an add: adding clips every bright wall to flat white and
+// throws away the texture that made the wash worth applying.
+void washRows(Framebuffer& fb, int rows, uint8_t r, uint8_t g, uint8_t b,
+              double t);
+
 class Framebuffer {
 public:
     Framebuffer(int w = kScreenW, int h = kScreenH);

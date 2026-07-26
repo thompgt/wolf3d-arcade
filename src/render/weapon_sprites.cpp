@@ -273,28 +273,9 @@ void renderWeapon(Framebuffer& fb, const Sprite& art, double bob) {
 }
 
 void applyMuzzleFlash(Framebuffer& fb, double intensity) {
-    if (intensity <= 0.0) return;
-    const double t = std::clamp(intensity, 0.0, 1.0) * 0.45;
-
-    uint32_t* px = fb.data();
-    for (int y = 0; y < kViewH; ++y) {
-        for (int x = 0; x < kScreenW; ++x) {
-            const uint32_t c = px[static_cast<size_t>(y) * kScreenW + x];
-            // Lerp toward the flash colour rather than adding: adding clips
-            // bright walls to flat white and loses the texture entirely.
-            // Signed, deliberately: a pixel already brighter than the flash
-            // colour must dim toward it, and unsigned arithmetic would wrap
-            // that difference into a huge positive number.
-            const auto mix = [t](uint32_t v, int target) {
-                const double o = v + (target - static_cast<int>(v)) * t;
-                return static_cast<uint8_t>(std::clamp(o, 0.0, 255.0));
-            };
-            px[static_cast<size_t>(y) * kScreenW + x] =
-                rgb(mix((c >> 16) & 0xFF, 0xFF),
-                    mix((c >> 8) & 0xFF, 0xE8),
-                    mix(c & 0xFF, 0xA0));
-        }
-    }
+    // The 3D view only. A flash that lit the status bar would read as a
+    // rendering bug rather than as a gun going off.
+    washRows(fb, kViewH, 0xFF, 0xE8, 0xA0, intensity * 0.45);
 }
 
 } // namespace wolf

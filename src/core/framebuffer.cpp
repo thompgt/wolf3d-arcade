@@ -13,6 +13,33 @@ uint32_t shade(uint32_t color, double factor) {
     return rgb(r, g, b);
 }
 
+void washRows(Framebuffer& fb, int rows, uint8_t r, uint8_t g, uint8_t b,
+              double t) {
+    t = std::clamp(t, 0.0, 1.0);
+    if (t <= 0.0) return;
+
+    const int y1 = std::min(rows, fb.height());
+    const int w  = fb.width();
+    uint32_t* px = fb.data();
+
+    // Signed, deliberately: a channel already brighter than the target has
+    // to move down toward it, and unsigned arithmetic would wrap that
+    // difference into a huge positive number.
+    const auto mix = [t](uint32_t v, int target) {
+        const double o = v + (target - static_cast<int>(v)) * t;
+        return static_cast<uint8_t>(std::clamp(o, 0.0, 255.0));
+    };
+
+    for (int y = 0; y < y1; ++y) {
+        for (int x = 0; x < w; ++x) {
+            uint32_t& c = px[static_cast<size_t>(y) * w + x];
+            c = rgb(mix((c >> 16) & 0xFF, r),
+                    mix((c >> 8) & 0xFF, g),
+                    mix(c & 0xFF, b));
+        }
+    }
+}
+
 Framebuffer::Framebuffer(int w, int h)
     : w_(w), h_(h), pixels_(static_cast<size_t>(w) * h, 0) {}
 
