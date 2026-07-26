@@ -29,6 +29,15 @@ constexpr int kBase = 63;
 // Star-shaped rather than a disc — a disc reads as a bubble, and the spikes
 // are what make it read as an explosion at eight pixels across.
 void drawFlash(Sprite& s, double cx, double cy, double scale) {
+    // Kept inside the frame rather than allowed to run off the top. On the
+    // recoil frame the muzzle is near the top of the sprite, and an
+    // unclamped flash gets sliced flat by the frame edge — which reads as a
+    // rendering bug, where a flash sitting a few pixels low reads as
+    // nothing at all at the speed these cycle.
+    const double reach = 11.0 * scale + 1.0;
+    cx = std::clamp(cx, reach, kTexSize - reach);
+    cy = std::max(cy, reach);
+
     sprEllipse(s, cx, cy, 7.0 * scale, 5.5 * scale, kFlashMid);
     sprEllipse(s, cx, cy, 4.0 * scale, 3.0 * scale, kFlashHot);
     for (int i = 0; i < 8; ++i) {
@@ -44,13 +53,26 @@ void drawFlash(Sprite& s, double cx, double cy, double scale) {
 
 // The gloved fist that holds everything. Drawn once here so all four weapons
 // are visibly held by the same person.
+//
+// The wrist below it is deliberately narrower than the fist rather than a
+// full-width block down to the frame edge. A block reads as a slab of brown
+// with a stick coming out of it, and it swallows whatever it is supposed to
+// be holding — the weapon has to stay the thing you are looking at.
 void drawFist(Sprite& s, int cx, int cy, int w, int h) {
-    sprBox(s, cx - w / 2, cy, cx + w / 2, kBase, kGlove);
-    sprEllipse(s, cx, cy + 2.0, w / 2.0, h / 2.0, kGlove);
-    // Knuckles, as three lit bumps. Without them the hand is a mitten.
-    for (int i = -1; i <= 1; ++i)
-        sprEllipse(s, cx + i * (w / 4.0), cy + 1.0, w / 9.0, 2.0, kGloveLit);
-    sprBox(s, cx - w / 2, cy + h / 2, cx - w / 2 + 2, kBase, kGloveDark);
+    const double hw = w / 2.0;
+
+    sprBox(s, cx - static_cast<int>(hw * 0.62), cy,
+           cx + static_cast<int>(hw * 0.62), kBase, kGlove);   // wrist
+    sprEllipse(s, cx, cy, hw, h / 2.0, kGlove);                // palm
+
+    // Knuckles, as four lit bumps across the top. Without them the hand is
+    // a mitten.
+    for (int i = 0; i < 4; ++i)
+        sprEllipse(s, cx - hw * 0.62 + i * (hw * 0.42), cy - h * 0.22,
+                   hw * 0.17, 2.2, kGloveLit);
+
+    // Shaded down the right, away from the light every other sprite uses.
+    sprEllipse(s, cx + hw * 0.72, cy + 1.0, hw * 0.28, h / 2.6, kGloveDark);
 }
 
 // --- knife ---------------------------------------------------------------
@@ -60,25 +82,30 @@ void drawFist(Sprite& s, int cx, int cy, int w, int h) {
 
 void drawKnife(Sprite& s, int frame) {
     // Thrust: out and up, then back. Frame 0 is the resting pose.
-    const int lift  = (frame == 0) ? 0 : (frame == 2 ? 20 : (frame == 1 ? 12 : 6));
-    const int reach = (frame == 0) ? 0 : (frame == 2 ? 10 : (frame == 1 ?  6 : 3));
+    const int lift  = (frame == 0) ? 0 : (frame == 2 ? 22 : (frame == 1 ? 13 : 6));
+    const int reach = (frame == 0) ? 0 : (frame == 2 ? 12 : (frame == 1 ?  7 : 3));
 
-    const int handX = 46 - reach;
-    const int handY = 46 - lift;
+    const int handX = 45 - reach;
+    const int handY = 50 - lift;
 
-    // Blade: a taper drawn as narrowing rows, with a lit edge down one side.
-    const int tipY = handY - 26;
-    for (int y = tipY; y < handY - 4; ++y) {
-        const double t = static_cast<double>(y - tipY) / (handY - 4 - tipY);
-        const int halfW = 1 + static_cast<int>(t * 3.5);
-        const int bx = handX - static_cast<int>((1.0 - t) * 6.0);
+    // Blade: a taper drawn as narrowing rows, angled in toward the centre of
+    // the screen so the strike crosses the crosshair rather than jabbing the
+    // corner. Lit down one edge, dark down the other — a flat grey taper
+    // reads as a plank.
+    const int tipY = handY - 34;
+    const int hilt = handY - 6;
+    for (int y = tipY; y < hilt; ++y) {
+        const double t = static_cast<double>(y - tipY) / (hilt - tipY);
+        const int halfW = 1 + static_cast<int>(t * 4.5);
+        const int bx = handX - static_cast<int>((1.0 - t) * 9.0);
         sprBox(s, bx - halfW, y, bx + halfW, y + 1, kSteel);
         s.set(bx - halfW, y, kSteelLit);          // ground edge catches light
         s.set(bx + halfW, y, kSteelDark);
     }
 
-    sprBox(s, handX - 7, handY - 5, handX + 7, handY - 2, kBrass);   // guard
-    drawFist(s, handX, handY, 20, 18);
+    sprBox(s, handX - 10, hilt, handX + 8, hilt + 4, kBrass);        // guard
+    sprBox(s, handX - 10, hilt, handX + 8, hilt + 1, rgb(0xe8, 0xc0, 0x50));
+    drawFist(s, handX, handY + 4, 24, 19);
 }
 
 // --- pistol --------------------------------------------------------------
@@ -86,42 +113,57 @@ void drawKnife(Sprite& s, int frame) {
 void drawPistol(Sprite& s, int frame) {
     // Recoil: the whole weapon kicks up and settles.
     const int kick = (frame == 0) ? 0 : (frame == 1 ? 9 : (frame == 2 ? 5 : 2));
-    const int cx = 34;
-    const int y  = 40 - kick;
+    const int cx = 31;
+    const int y  = 44 - kick;
 
-    sprBox(s, cx - 4, y - 20, cx + 4, y + 2, kBlued);      // slide
-    sprBox(s, cx - 4, y - 20, cx - 2, y + 2, kSteel);      // lit left face
-    sprBox(s, cx - 2, y - 21, cx + 2, y - 20, kSteelLit);  // front sight
-    sprBox(s, cx - 3, y + 2, cx + 3, y + 8, kBlued);       // frame
-    sprBox(s, cx - 2, y + 6, cx + 5, y + 16, kWood);       // grip
-    sprBox(s, cx - 1, y + 5, cx + 1, y + 9, kSteelDark);   // trigger guard
+    // Grip first, then the fist over it: the hand has to be in front of the
+    // grip and behind everything above it, which is the whole reason the
+    // pistol is drawn bottom-up rather than in one pass.
+    sprBox(s, cx - 1, y, cx + 11, y + 22, kWood);
+    sprBox(s, cx + 8, y, cx + 11, y + 22, rgb(0x4c, 0x2c, 0x14));   // back strap
 
-    if (frame == 1) drawFlash(s, cx, y - 22.0, 1.0);
+    sprBox(s, cx - 8, y - 8, cx + 9, y + 1, kSteel);       // frame
+    sprBox(s, cx - 8, y - 8, cx - 5, y + 1, kSteelLit);    // lit left face
+    sprBox(s, cx + 1, y + 1, cx + 4, y + 8, kSteelDark);   // trigger guard
+    sprBox(s, cx + 2, y + 2, cx + 3, y + 6, kTransparent); // ...and its hole
 
-    drawFist(s, cx + 2, y + 12, 20, 18);
+    sprBox(s, cx - 8, y - 30, cx + 4, y - 8, kBlued);      // slide
+    sprBox(s, cx - 8, y - 30, cx - 5, y - 8, kSteel);      // lit left face
+    sprBox(s, cx - 7, y - 26, cx + 3, y - 25, kSteelDark); // ejection port
+    sprBox(s, cx - 3, y - 32, cx - 1, y - 30, kSteelLit);  // front sight
+    sprEllipse(s, cx - 2.0, y - 30.0, 2.2, 1.6, kOutline); // muzzle
+
+    if (frame == 1) drawFlash(s, cx - 2.0, y - 34.0, 1.1);
+
+    drawFist(s, cx + 6, y + 12, 25, 20);
 }
 
 // --- machine gun ---------------------------------------------------------
 
 void drawMachineGun(Sprite& s, int frame) {
-    const int kick = (frame == 0) ? 0 : (frame == 1 ? 7 : (frame == 2 ? 4 : 2));
-    const int cx = 32;
-    const int y  = 38 - kick;
+    const int kick = (frame == 0) ? 0 : (frame == 1 ? 8 : (frame == 2 ? 4 : 2));
+    const int cx = 30;
+    const int y  = 44 - kick;
 
-    sprBox(s, cx - 3, y - 30, cx + 3, y - 12, kBlued);     // barrel
-    // Cooling slots: three notches, which is what stops the barrel reading
-    // as a plain rectangle.
-    for (int i = 0; i < 3; ++i)
-        sprBox(s, cx - 3, y - 27 + i * 5, cx + 3, y - 26 + i * 5, kSteelDark);
+    sprBox(s, cx - 3, y + 2, cx + 7, y + 22, kBlued);      // magazine
+    sprBox(s, cx + 4, y + 2, cx + 7, y + 22, kSteelDark);
 
-    sprBox(s, cx - 6, y - 12, cx + 6, y + 6, kSteel);      // receiver
-    sprBox(s, cx - 6, y - 12, cx - 4, y + 6, kSteelLit);
-    sprBox(s, cx - 2, y + 6, cx + 4, y + 20, kBlued);      // magazine
-    sprBox(s, cx + 6, y - 6, cx + 12, y + 2, kWood);       // stock stub
+    sprBox(s, cx - 10, y - 14, cx + 10, y + 4, kSteel);    // receiver
+    sprBox(s, cx - 10, y - 14, cx - 7, y + 4, kSteelLit);
+    sprBox(s, cx - 10, y + 2, cx + 10, y + 4, kSteelDark);
+    sprBox(s, cx + 10, y - 8, cx + 18, y + 2, kWood);      // stock stub
 
-    if (frame == 1) drawFlash(s, cx, y - 32.0, 1.2);
+    sprBox(s, cx - 4, y - 32, cx + 3, y - 14, kBlued);     // barrel shroud
+    // Cooling slots: four notches, which is what stops the barrel reading as
+    // a plain rectangle at this size.
+    for (int i = 0; i < 4; ++i)
+        sprBox(s, cx - 4, y - 30 + i * 4, cx + 3, y - 29 + i * 4, kSteelDark);
+    sprBox(s, cx - 3, y - 34, cx + 2, y - 32, kSteel);     // muzzle
+    sprEllipse(s, cx - 0.5, y - 34.0, 2.0, 1.4, kOutline);
 
-    drawFist(s, cx + 4, y + 14, 22, 18);
+    if (frame == 1) drawFlash(s, cx, y - 37.0, 1.25);
+
+    drawFist(s, cx + 3, y + 14, 25, 20);
 }
 
 // --- chaingun ------------------------------------------------------------
@@ -132,31 +174,40 @@ void drawMachineGun(Sprite& s, int frame) {
 void drawChaingun(Sprite& s, int frame) {
     const int kick = (frame == 0) ? 0 : 3;
     const int cx = 32;
-    const int y  = 40 - kick;
+    const int y  = 46 - kick;
 
-    sprBox(s, cx - 12, y - 10, cx + 12, y + 8, kSteel);        // housing
-    sprBox(s, cx - 12, y - 10, cx - 9, y + 8, kSteelLit);
-    sprBox(s, cx - 12, y + 8, cx + 12, y + 11, kSteelDark);
-
-    // Six barrels around a hub, phase-shifted per frame so the cluster turns.
+    // Barrels first: the housing is drawn over their roots so the cluster
+    // emerges from it rather than sitting on top of it.
+    //
+    // Six around a hub, phase-shifted per frame. The far-side barrels are
+    // drawn darker, which is what makes a static sprite read as spinning
+    // instead of as a ring of dots.
     const double phase = frame * 0.5235987756;   // 30 degrees a frame
     for (int i = 0; i < 6; ++i) {
         const double a = phase + i * 1.0471975512;
-        const double bx = cx + std::cos(a) * 7.0;
-        const double by = (y - 4) + std::sin(a) * 3.2;   // squashed: seen end-on
-        // Barrels on the far side of the hub are darker, which is what gives
-        // the cluster depth rather than making it a ring of dots.
+        const double bx = cx + std::cos(a) * 9.0;
+        const double by = (y - 8) + std::sin(a) * 4.0;   // squashed: end-on
         const bool near = std::sin(a) > 0.0;
-        sprBox(s, static_cast<int>(bx) - 2, static_cast<int>(by) - 22,
-               static_cast<int>(bx) + 2, static_cast<int>(by),
+        sprBox(s, static_cast<int>(bx) - 2, static_cast<int>(by) - 28,
+               static_cast<int>(bx) + 3, static_cast<int>(by),
                near ? kSteel : kSteelDark);
+        if (near)
+            sprBox(s, static_cast<int>(bx) - 2, static_cast<int>(by) - 28,
+                   static_cast<int>(bx) - 1, static_cast<int>(by), kSteelLit);
     }
-    sprEllipse(s, cx, y - 4.0, 5.0, 4.0, kBlued);              // hub
+    sprEllipse(s, cx, y - 8.0, 6.0, 4.5, kBlued);              // hub
 
-    if (frame == 1 || frame == 3) drawFlash(s, cx, y - 26.0, 1.4);
+    sprBox(s, cx - 15, y - 6, cx + 15, y + 12, kSteel);        // housing
+    sprBox(s, cx - 15, y - 6, cx - 11, y + 12, kSteelLit);
+    sprBox(s, cx - 15, y + 12, cx + 15, y + 15, kSteelDark);
+    sprBox(s, cx - 9, y - 2, cx + 9, y + 1, kSteelDark);       // vent band
 
-    drawFist(s, cx - 14, y + 6, 20, 17);
-    drawFist(s, cx + 14, y + 6, 20, 17);
+    if (frame == 1 || frame == 3) drawFlash(s, cx, y - 34.0, 1.45);
+
+    // Two hands: the only weapon here heavy enough to need both, which is
+    // most of what tells you it is the chaingun before you have fired it.
+    drawFist(s, cx - 17, y + 12, 21, 18);
+    drawFist(s, cx + 17, y + 12, 21, 18);
 }
 
 } // namespace
