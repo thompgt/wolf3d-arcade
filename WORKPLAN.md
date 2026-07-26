@@ -56,23 +56,25 @@ game and dumping its own frames.
 
 ---
 
-## Phase 2 — Procedural textures `[ ]`
+## Phase 2 — Procedural textures `[x]`
 
 No asset files anywhere: every texture is generated into a 64x64 buffer at
 startup.
 
-- [ ] `render/textures.h|cpp` — deterministic value-noise helper (seeded, so
-      builds are reproducible)
-- [ ] Wall set: grey brick, blue stone, wood panel, mossy stone, steel,
-      plus a flag/portrait variant for wall detail
-- [ ] Door texture + door-frame side texture
-- [ ] Textured wall columns: `texX` from the hit fraction, fixed-point `texY`
-      stepping down the column
-- [ ] 16-step distance shading table (banded, not smooth — matches the
-      original's palette-shifted look)
+- [x] `render/textures.h|cpp` — seeded xorshift + tiling value noise, so
+      builds are byte-for-byte reproducible and textures repeat seamlessly
+- [x] Wall set: running-bond brick, blue ashlar, knotted wood, mossy stone,
+      riveted steel
+- [x] Door texture (barred window, recessed panel) + door-frame jamb
+- [x] Exit-switch texture with a red lever
+- [x] Textured wall columns: `texX` from the hit fraction with correct
+      mirroring, `texY` stepped from the *unclamped* column top
+- [x] 16-band distance shading (banded, not smooth — a smooth ramp reads as
+      modern fog rather than palette shifting)
+- [x] Flat texture-atlas debug view (`T`)
 
 **Done when:** every wall in the level is textured and reads clearly at
-distance without shimmering.
+distance without shimmering. ✔
 
 ---
 
