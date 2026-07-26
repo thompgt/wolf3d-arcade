@@ -7,8 +7,11 @@
 #include <string>
 
 #include "core/config.h"
+#include "game/items.h"
 #include "game/map.h"
+#include "game/player.h"
 #include "render/raycast.h"
+#include "render/sprites.h"
 
 namespace wolf {
 namespace {
@@ -217,6 +220,84 @@ void testRays(Report& r) {
     r.near(hit.perpDist, 11.5, 1e-6, "wall at x=15 is 11.5 tiles away");
 }
 
+// --- items ---------------------------------------------------------------
+
+// Places a fresh player on a tile and collects whatever is there.
+Player playerOn(Items& items, double x, double y) {
+    Player p;
+    p.spawn(x, y, 0.0);
+    items.collect(p);
+    return p;
+}
+
+int billboardCount(const Items& items) {
+    std::vector<Billboard> b;
+    items.appendBillboards(b);
+    return static_cast<int>(b.size());
+}
+
+void testItems(Report& r) {
+    r.section("items");
+    Map m = Map::level1();
+    Items items;
+    items.spawnFrom(m);
+
+    // 9 treasure + 3 health + 5 ammo + 2 keys + 2 weapons + 2 lamps
+    // + 3 tables. Enemies are not items and must not appear here.
+    r.check(billboardCount(items) == 26, "26 objects spawn into the world");
+    r.check(items.treasureTotal() == 9, "9 treasures counted for the tally");
+
+    // Ammo at (13,3), in the third cell.
+    {
+        Items fresh; fresh.spawnFrom(m);
+        Player p = playerOn(fresh, 13.5, 3.5);
+        r.check(p.ammo() == 16, "walking over a clip takes it (8 -> 16)");
+        r.check(billboardCount(fresh) == 25, "collected item leaves the world");
+        fresh.collect(p);
+        r.check(p.ammo() == 16, "an already-taken clip cannot be taken twice");
+    }
+
+    // A full-health player must leave the medkit where it is, so it is
+    // still there on the way back rather than being silently binned.
+    {
+        Items fresh; fresh.spawnFrom(m);
+        Player p = playerOn(fresh, 2.5, 3.5);
+        r.check(p.health() == 100, "full health is not exceeded");
+        r.check(billboardCount(fresh) == 26, "refused medkit stays in the world");
+    }
+
+    // Keys and weapons.
+    {
+        Items fresh; fresh.spawnFrom(m);
+        Player g = playerOn(fresh, 39.5, 7.5);
+        r.check(g.hasGoldKey(), "gold key is collected from the storeroom");
+
+        Items fresh2; fresh2.spawnFrom(m);
+        Player s = playerOn(fresh2, 7.5, 23.5);
+        r.check(s.hasSilverKey(), "silver key is collected from the mess hall");
+
+        Items fresh3; fresh3.spawnFrom(m);
+        Player w = playerOn(fresh3, 4.5, 30.5);
+        r.check(w.hasMachineGun(), "machine gun is collected from the armory");
+        r.check(w.ammo() > 8, "a picked-up weapon comes part-loaded");
+    }
+
+    // Treasure is the score game.
+    {
+        Items fresh; fresh.spawnFrom(m);
+        Player p = playerOn(fresh, 44.5, 2.5);
+        r.check(p.score() > 0, "treasure scores");
+        r.check(fresh.treasureTaken() == 1, "treasure counts toward the tally");
+    }
+
+    // Scenery blocks, pickups do not: walking through a medkit is the whole
+    // point of it, walking through a table is not.
+    r.check(items.blocks(6.5, 6.5, 0.24), "a table blocks the player");
+    r.check(items.blocks(20.5, 3.5, 0.24), "a lamp blocks the player");
+    r.check(!items.blocks(13.5, 3.5, 0.24), "an ammo clip does not block");
+    r.check(!items.blocks(30.5, 30.5, 0.24), "empty floor does not block");
+}
+
 } // namespace
 
 int runSelfTest() {
@@ -227,6 +308,7 @@ int runSelfTest() {
     testPushwalls(r);
     testExit(r);
     testRays(r);
+    testItems(r);
 
     std::ostringstream out;
     out << "wolf3d-arcade self-test\n" << r.log.str() << "\n"
