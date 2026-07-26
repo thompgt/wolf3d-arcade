@@ -189,17 +189,45 @@ guard chain with pain-state lock. ✔
 
 ---
 
-## Phase 7 — HUD and game states `[ ]`
+## Phase 7 — HUD and game states `[x]`
 
-- [ ] `render/font.cpp` — procedurally built 8x8 bitmap digits + uppercase
-- [ ] Status bar: FLOOR / SCORE / LIVES / face / HEALTH / AMMO / KEYS / weapon
-- [ ] Face portrait: reacts to health tier, looks left/right idly, grimaces
-      on damage, gloats on a kill streak
-- [ ] Damage flash (red) and pickup flash (yellow) palette washes
-- [ ] Title screen, death sequence, level-complete tally with time/kill/secret
-      percentages
+- [x] `render/font.cpp` — 8x8 bitmap digits + uppercase, written as binary
+      literals so each glyph is legible in the table
+- [x] Status bar: FLOOR / SCORE / LIVES / face / HEALTH / KEYS / weapon+ammo
+- [x] Face portrait: reacts to health tier, looks left/right idly, grimaces
+      on damage, gloats on a kill
+- [x] Damage flash (red) and pickup flash (yellow) washes, sharing one
+      `washRows` primitive with the muzzle flash
+- [x] Title screen, death sequence, level-complete tally with kill, treasure
+      and secret percentages
+- [x] 19 more self-test checks (151 total)
 
-**Done when:** the screen reads as a Wolf3D screen at a glance.
+Two departures from the plan above, both forced by the screen itself.
+
+The bar is 320 pixels and the font is 8 wide, so a five-letter label costs
+40 of them — seven labelled fields do not fit. The keys lost their caption,
+since a gold key and a silver key need none, and the weapon's name became
+the ammo slot's label rather than taking a slot of its own: the count
+belongs to the weapon, so naming it there is free. The layout budget is now
+asserted in the self-test rather than eyeballed, because the first attempt
+ran FLOOR into SCORE and pushed the weapon off the right-hand edge.
+
+`Map` also had to count its own secrets. `pushwalls_` holds only the ones
+still in motion, so a tally derived from that list reports every secret as
+un-found the instant it settles.
+
+Driving the game turned up an input bug that had nothing to do with the HUD:
+firing read only `down(Key::Fire)`, so a keystroke shorter than one 60Hz
+tick was never down when a tick sampled it and the shot vanished — the exact
+failure `Platform`'s sticky press latch exists to prevent, in the one place
+that was not using it.
+
+**Done when:** the screen reads as a Wolf3D screen at a glance. ✔ verified
+by driving the built game and dumping its own frames — the title and the
+status bar in play. The death and level-complete screens are covered by
+their logic in `--selftest` rather than by a captured frame; scripted
+keystrokes cannot reliably die on cue or reach the exit past two locked
+doors.
 
 ---
 

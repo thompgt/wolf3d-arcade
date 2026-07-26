@@ -8,11 +8,19 @@ The only dependency is Win32 itself: the renderer draws into a 320x200
 32-bit buffer and blits it to the window with `StretchDIBits`, which is
 about as close as you can get today to how the original worked.
 
-> Status: **Phase 6 complete** — raycaster, procedural textures, doors and
-> secrets, billboard sprites, enemy AI and weapons. You can walk level 1,
-> open doors, shove pushwalls, collect pickups and reach the exit; guards
-> patrol, spot you, chase and shoot back; and you can shoot back at them
-> with four weapons. The HUD is next. See [WORKPLAN.md](WORKPLAN.md).
+> Status: **Phase 7 complete** — raycaster, procedural textures, doors and
+> secrets, billboard sprites, enemy AI, weapons and the HUD. Level 1 plays
+> start to finish: walk it, open doors, shove pushwalls, collect pickups,
+> fight the guards with four weapons, and reach the exit for a tally. The
+> modern abilities layer is next. See [WORKPLAN.md](WORKPLAN.md).
+
+![The status bar in play](docs/hud.png)
+
+FLOOR, SCORE, LIVES, the face, HEALTH, the two keys and the weapon with its
+ammo — the whole bar is drawn with an 8x8 bitmap font defined in source,
+like every other pixel in the game.
+
+![The title screen](docs/title.png)
 
 ![A doorway in level 1](docs/phase3.png)
 
@@ -106,14 +114,29 @@ src/
     framebuffer.h|cpp   the pixel buffer and its primitives
   platform/
     win32_app.h|cpp     window, input, timing, blit (only Win32-aware code)
-  render/               raycaster, textures, sprites, HUD
+  render/
+    raycast.h|cpp       DDA wall casting and the depth buffer
+    textures.h|cpp      procedural wall and door textures
+    sprite.h            the 64x64 frame and its drawing primitives
+    sprite_set.h|cpp    pickups and scenery
+    actor_sprites.h|cpp guards and SS, 49 frames each
+    weapon_sprites.*    the four view models and the muzzle flash
+    sprites.h|cpp       billboard projection and depth clipping
+    font.h|cpp          the 8x8 bitmap font
+    hud.h|cpp           status bar, face portrait, state screens
   game/
     game.h|cpp          state machine, world tick
-                        map, player, enemies, weapons
+    map.h|cpp           tiles, doors, pushwalls, spawns
+    player.h|cpp        camera, movement, collision
+    items.h|cpp         pickups and blocking scenery
+    enemy.h|cpp         actor state machine and AI
+    weapons.h|cpp       the tuning table and hitscan firing
 ```
 
 The split is deliberate: `render/` never makes game decisions, `game/` never
 writes pixels, and `platform/` is the only thing that includes `windows.h`.
+The status bar is drawn from a plain `HudState` struct for that reason — it
+can be told health is 12, and it cannot ask whether you are about to die.
 
 ## Assets
 
