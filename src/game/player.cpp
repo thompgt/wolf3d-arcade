@@ -31,6 +31,12 @@ void Player::damage(int amount) {
     health_ = std::max(health_ - amount, 0);
 }
 
+bool Player::useAmmo(int amount) {
+    if (amount <= 0 || ammo_ < amount) return false;
+    ammo_ -= amount;
+    return true;
+}
+
 bool Player::giveAmmo(int amount) {
     if (ammo_ >= kMaxAmmo) return false;
     ammo_ = std::min(ammo_ + amount, kMaxAmmo);

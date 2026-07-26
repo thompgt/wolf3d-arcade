@@ -66,6 +66,11 @@ public:
     bool giveAmmo(int amount);
     void addScore(int amount) { score_ += amount; }
 
+    // Spends rounds from the pool shared by all three firearms. Returns
+    // false and spends nothing if there are not enough — a partial burst
+    // would let a two-round weapon fire on one.
+    bool useAmmo(int amount);
+
     void damage(int amount);
     bool isDead() const { return health_ <= 0; }
 
