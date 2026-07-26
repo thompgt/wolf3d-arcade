@@ -15,13 +15,13 @@
 
 #include <cstdint>
 
+#include "../render/weapon_sprites.h"
+
 namespace wolf {
 
 class Map;
 class Player;
 class Enemies;
-
-enum class WeaponType : uint8_t { Knife, Pistol, MachineGun, Chaingun, Count };
 
 struct WeaponTuning {
     const char* name;
