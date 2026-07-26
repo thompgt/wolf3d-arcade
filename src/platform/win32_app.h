@@ -19,6 +19,7 @@ enum class Key {
     Dash, Grenade, Slowmo,
     Start, Quit,
     Minimap,     // debug: top-down view of the level
+    TexAtlas,    // debug: show the generated textures flat
     Screenshot,  // debug: dump the framebuffer to shot.bmp
     Count
 };

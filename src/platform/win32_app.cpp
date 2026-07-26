@@ -176,6 +176,7 @@ bool Platform::pump() {
     set(Key::Start,       vk(VK_RETURN));
     set(Key::Quit,        vk(VK_ESCAPE));
     set(Key::Minimap,     vk('M'));
+    set(Key::TexAtlas,    vk('T'));
     set(Key::Screenshot,  vk(VK_F12));
 
     // Latch a rising edge for anything newly pressed. edge_ is only cleared

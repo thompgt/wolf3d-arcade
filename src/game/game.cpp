@@ -28,6 +28,7 @@ constexpr uint32_t kMiniRay    = rgb(0xf0, 0x40, 0x40);
 } // namespace
 
 void Game::init() {
+    textures_.generate();
     map_   = Map::level1();
     state_ = GameState::Title;
     time_  = 0.0;
@@ -66,7 +67,8 @@ void Game::updateTitle(const Platform& in) {
 }
 
 void Game::updatePlaying(const Platform& in) {
-    if (in.pressed(Key::Minimap)) show_minimap_ = !show_minimap_;
+    if (in.pressed(Key::Minimap))  show_minimap_ = !show_minimap_;
+    if (in.pressed(Key::TexAtlas)) show_atlas_   = !show_atlas_;
     player_.update(in, map_, kTickDT);
     // Doors, enemy AI and projectiles hang off here.
 }
@@ -77,9 +79,26 @@ void Game::render(Framebuffer& fb) {
         return;
     }
 
-    caster_.render(fb, map_, player_);
+    caster_.render(fb, map_, player_, textures_);
     renderStatusBar(fb);
     if (show_minimap_) renderMinimap(fb);
+    if (show_atlas_)   renderTexAtlas(fb);
+}
+
+void Game::renderTexAtlas(Framebuffer& fb) const {
+    // Four across, two down: the whole set at 1:1 with room to spare.
+    constexpr int kCols = 4;
+    constexpr int kPad  = 2;
+    const int originX = (kScreenW - (kCols * (kTexSize + kPad) - kPad)) / 2;
+    const int originY = 8;
+
+    for (int i = 0; i < TexCount; ++i) {
+        const int ox = originX + (i % kCols) * (kTexSize + kPad);
+        const int oy = originY + (i / kCols) * (kTexSize + kPad);
+        for (int y = 0; y < kTexSize; ++y)
+            for (int x = 0; x < kTexSize; ++x)
+                fb.put(ox + x, oy + y, textures_[i].at(x, y));
+    }
 }
 
 void Game::renderTitle(Framebuffer& fb) const {

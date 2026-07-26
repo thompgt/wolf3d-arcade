@@ -5,6 +5,7 @@
 #include "../core/framebuffer.h"
 #include "../platform/win32_app.h"
 #include "../render/raycast.h"
+#include "../render/textures.h"
 #include "map.h"
 #include "player.h"
 
@@ -40,15 +41,20 @@ private:
     void renderStatusBar(Framebuffer& fb) const;
     // Debug aid: top-down view of the level with the player's facing.
     void renderMinimap(Framebuffer& fb) const;
+    // Debug aid: the generated textures laid out flat, which is the only
+    // way to judge procedural art without perspective and shading in the way.
+    void renderTexAtlas(Framebuffer& fb) const;
 
     GameState state_ = GameState::Title;
     double    time_  = 0.0;   // seconds of simulated time
     bool      quit_  = false;
     bool      show_minimap_ = false;
+    bool      show_atlas_   = false;
 
-    Map       map_;
-    Player    player_;
-    Raycaster caster_;
+    Map        map_;
+    Player     player_;
+    Raycaster  caster_;
+    TextureSet textures_;
 };
 
 } // namespace wolf
