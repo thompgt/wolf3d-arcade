@@ -54,6 +54,11 @@ RayHit castRay(const Map& map, double px, double py, double dx, double dy,
 RayHit castRayDynamic(const Map& map, double px, double py,
                       double dx, double dy, double maxDist = 64.0);
 
+// Banded distance darkening, shared so sprites dim on exactly the same
+// schedule as the walls behind them. Two separate falloff curves is how you
+// get objects that visibly float against their surroundings.
+double distanceShade(double dist);
+
 class Raycaster {
 public:
     Raycaster() : depth_(kScreenW, 1e30) {}

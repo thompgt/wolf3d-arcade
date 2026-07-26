@@ -31,10 +31,18 @@ constexpr int kShadeBands = 16;
 // build for the same reason.
 constexpr double kSideDarken = 0.72;
 
-double bandedShade(double dist, bool sideY) {
+} // namespace
+
+double distanceShade(double dist) {
     double f = 1.0 - dist / kFogDist;
     f = std::clamp(f, kMinShade, 1.0);
-    f = std::floor(f * kShadeBands) / kShadeBands;
+    return std::floor(f * kShadeBands) / kShadeBands;
+}
+
+namespace {
+
+double bandedShade(double dist, bool sideY) {
+    const double f = distanceShade(dist);
     return sideY ? f * kSideDarken : f;
 }
 
