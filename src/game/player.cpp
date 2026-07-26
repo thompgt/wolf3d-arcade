@@ -1,11 +1,12 @@
-#include "player.h"
+﻿#include "player.h"
 
 #include <algorithm>
 #include <cmath>
 
 #include "../core/config.h"
-#include "items.h"
 #include "../platform/win32_app.h"
+#include "enemy.h"
+#include "items.h"
 
 namespace wolf {
 namespace {
@@ -15,17 +16,19 @@ namespace {
 // edges of the screen because there is no perspective correction to hide it.
 const double kPlaneLen = std::tan(kFov * 0.5);
 
-} // namespace
-
-namespace {
 constexpr int kMaxHealth = 100;
 constexpr int kMaxAmmo   = 99;
+
 } // namespace
 
 bool Player::giveHealth(int amount) {
     if (health_ >= kMaxHealth) return false;
     health_ = std::min(health_ + amount, kMaxHealth);
     return true;
+}
+
+void Player::damage(int amount) {
+    health_ = std::max(health_ - amount, 0);
 }
 
 bool Player::giveAmmo(int amount) {
@@ -55,7 +58,7 @@ void Player::setAngle(double a) {
 }
 
 void Player::update(const Platform& in, const Map& map, const Items& items,
-                    double dt) {
+                    const Enemies& enemies, double dt) {
     // --- turning -----------------------------------------------------
     double turn = 0.0;
     if (in.down(Key::TurnLeft))  turn -= tuning_.turnSpeed * dt;
@@ -72,7 +75,8 @@ void Player::update(const Platform& in, const Map& map, const Items& items,
     if (in.down(Key::StrafeRight)) strafe += 1.0;
     if (in.down(Key::StrafeLeft))  strafe -= 1.0;
 
-    if (fwd == 0.0 && strafe == 0.0) return;
+    moving_ = (fwd != 0.0 || strafe != 0.0);
+    if (!moving_) return;
 
     // Normalise so moving diagonally isn't faster than moving straight.
     const double len = std::sqrt(fwd * fwd + strafe * strafe);
@@ -87,17 +91,17 @@ void Player::update(const Platform& in, const Map& map, const Items& items,
 
     const double dx = (dir_x_ * fwd + rightX * strafe) * speed * dt;
     const double dy = (dir_y_ * fwd + rightY * strafe) * speed * dt;
-    moveWithCollision(map, items, dx, dy);
+    moveWithCollision(map, items, enemies, dx, dy);
 }
 
 void Player::moveWithCollision(const Map& map, const Items& items,
-                               double dx, double dy) {
-    if (!collides(map, items, x_ + dx, y_)) x_ += dx;
-    if (!collides(map, items, x_, y_ + dy)) y_ += dy;
+                               const Enemies& enemies, double dx, double dy) {
+    if (!collides(map, items, enemies, x_ + dx, y_)) x_ += dx;
+    if (!collides(map, items, enemies, x_, y_ + dy)) y_ += dy;
 }
 
 bool Player::collides(const Map& map, const Items& items,
-                      double x, double y) const {
+                      const Enemies& enemies, double x, double y) const {
     const double r = tuning_.radius;
     const int x0 = static_cast<int>(std::floor(x - r));
     const int x1 = static_cast<int>(std::floor(x + r));
@@ -110,12 +114,13 @@ bool Player::collides(const Map& map, const Items& items,
             // can walk through even though it is still a door.
             if (map.blocksMovement(tx, ty)) return true;
 
-    // A pushwall in motion is off the grid, so it needs its own test — and
+    // A pushwall in motion is off the grid, so it needs its own test, and
     // it must push the player rather than swallow them.
     if (map.hitsPushwall(x, y, r)) return true;
 
-    // Lamps and tables are billboards, not cells.
-    return items.blocks(x, y, r);
+    // Lamps, tables and living guards are billboards, not cells.
+    if (items.blocks(x, y, r)) return true;
+    return enemies.blocks(x, y, r);
 }
 
 } // namespace wolf

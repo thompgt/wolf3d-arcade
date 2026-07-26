@@ -8,10 +8,11 @@ The only dependency is Win32 itself: the renderer draws into a 320x200
 32-bit buffer and blits it to the window with `StretchDIBits`, which is
 about as close as you can get today to how the original worked.
 
-> Status: **Phase 4 complete** — raycaster, procedural textures, doors and
-> secrets, and billboard sprites. You can walk level 1, open doors, shove
-> pushwalls, collect pickups and reach the exit. Enemies and weapons are
-> next. See [WORKPLAN.md](WORKPLAN.md).
+> Status: **Phase 5 complete** — raycaster, procedural textures, doors and
+> secrets, billboard sprites, and enemy AI. You can walk level 1, open
+> doors, shove pushwalls, collect pickups and reach the exit, and guards
+> now patrol, spot you, chase and shoot back. Weapons are next.
+> See [WORKPLAN.md](WORKPLAN.md).
 
 ![A doorway in level 1](docs/phase3.png)
 

@@ -12,6 +12,7 @@ namespace wolf {
 
 class Platform;
 class Items;
+class Enemies;
 
 // Tuning. Speeds are in tiles per second, turn rates in radians per second.
 struct PlayerTuning {
@@ -27,10 +28,11 @@ class Player {
 public:
     void spawn(double x, double y, double angle);
 
-    // Items is passed in because blocking scenery — a lamp, a table — is not
-    // on the tile grid and so cannot be found by any amount of map lookup.
+    // Items and Enemies are passed in because blocking scenery and living
+    // guards are billboards, not cells — no amount of map lookup will find
+    // them, and walking through a guard would look ridiculous.
     void update(const Platform& in, const Map& map, const Items& items,
-                double dt);
+                const Enemies& enemies, double dt);
 
     double x() const { return x_; }
     double y() const { return y_; }
@@ -63,6 +65,14 @@ public:
     bool giveHealth(int amount);
     bool giveAmmo(int amount);
     void addScore(int amount) { score_ += amount; }
+
+    void damage(int amount);
+    bool isDead() const { return health_ <= 0; }
+
+    // True if the player moved on the last tick. Enemy accuracy consults
+    // this, which is what makes strafing an actual defence rather than a
+    // cosmetic one.
+    bool isMoving() const { return moving_; }
     void giveMachineGun() { machine_gun_ = true; }
     void giveChaingun()   { chaingun_ = true; }
 
@@ -73,12 +83,13 @@ private:
     // something. That separation is what lets the player slide along a wall
     // instead of sticking to it when walking into it at an angle.
     void moveWithCollision(const Map& map, const Items& items,
-                           double dx, double dy);
+                           const Enemies& enemies, double dx, double dy);
 
     // True if a circle of the player's radius at (x, y) overlaps any solid
     // cell. Checked against the tile span the circle covers, so a corner
     // never slips through diagonally.
-    bool collides(const Map& map, const Items& items, double x, double y) const;
+    bool collides(const Map& map, const Items& items, const Enemies& enemies,
+                  double x, double y) const;
 
     double x_ = 1.5, y_ = 1.5;
     double angle_ = 0.0;
@@ -94,6 +105,7 @@ private:
     int  lives_  = 3;
     bool machine_gun_ = false;
     bool chaingun_    = false;
+    bool moving_      = false;
 
     PlayerTuning tuning_;
 };

@@ -119,32 +119,40 @@ and pickups apply their effect and vanish on touch. ✔
 
 ---
 
-## Phase 5 — Enemy AI `[ ]`
+## Phase 5 — Enemy AI `[x]`
 
 The core ask. Guards that patrol, notice you, chase, and shoot back.
 
-- [ ] `game/enemy.h|cpp` — actor struct: pos, angle, health, state, timer,
+- [x] `game/enemy.h|cpp` — actor struct: pos, angle, health, state, timer,
       patrol direction, target
-- [ ] State machine: `Stand → Path → Chase → Shoot → Pain → Die`, each with
+- [x] State machine: `Stand → Path → Chase → Shoot → Pain → Die`, each with
       its own animation frames and durations
-- [ ] Detection: FOV cone + line-of-sight raycast, plus a noise trigger so
+- [x] Detection: FOV cone + line-of-sight raycast, plus a noise trigger so
       firing a gun wakes nearby guards (as in the original)
-- [ ] Pathing: grid-following patrol along waypoint tiles; chase uses the
+- [x] Pathing: grid-following patrol along waypoint tiles; chase uses the
       classic 8-direction "try preferred axis, then the other" move
-- [ ] **Shoot action:** stop, telegraph frame, hitscan at the player with
+- [x] **Shoot action:** stop, telegraph frame, hitscan at the player with
       distance- and movement-dependent hit chance; damage scales with range
-- [ ] Pain state on hit interrupts the attack (gives the player pressure
+- [x] Pain state on hit interrupts the attack (gives the player pressure
       relief and makes the chaingun feel powerful)
-- [ ] Death animation → corpse sprite, no longer blocks movement
-- [ ] `render/actor_sprites.cpp` — procedurally drawn guard: 8 view angles ×
+- [x] Death animation → corpse sprite, no longer blocks movement
+- [x] `render/actor_sprites.cpp` — procedurally drawn guard: 8 view angles ×
       {walk ×4, stand, shoot ×3, pain, die ×5}, built from parametric
       head/torso/legs/gun shapes
-- [ ] Two enemy types: **Guard** (pistol, fast, weak) and **SS** (machine
+- [x] Two enemy types: **Guard** (pistol, fast, weak) and **SS** (machine
       gun burst, tanky) — same machine, different tuning table
+- [x] 31 more self-test checks (94 total), including a determinism check —
+      the AI's randomness comes from a seeded xorshift rather than `rand()`,
+      so a failing AI test reproduces exactly instead of being flaky
+
+`Billboard` carries a `const Sprite*` rather than a sprite index, because an
+enemy's frame depends on its facing relative to the camera, its animation
+and its state — an index would only mean something qualified by which set it
+indexed, and the renderer has no reason to know about either set.
 
 **Done when:** guards patrol on their own, spot you and shout, close
 distance, take cover-less potshots that actually hurt, flinch when hit, and
-die with a proper animation.
+die with a proper animation. ✔
 
 ---
 

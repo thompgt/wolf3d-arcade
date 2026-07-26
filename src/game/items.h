@@ -16,6 +16,7 @@ namespace wolf {
 
 class Map;
 class Player;
+class SpriteSet;
 
 enum class ItemKind : uint8_t {
     Health, Ammo, Treasure,
@@ -44,10 +45,15 @@ public:
     void collect(Player& player);
 
     // Adds every item still in the world to the render list.
-    void appendBillboards(std::vector<Billboard>& out) const;
+    void appendBillboards(std::vector<Billboard>& out,
+                          const SpriteSet& sprites) const;
 
     // True if a circle at (x, y) overlaps blocking scenery.
     bool blocks(double x, double y, double r) const;
+
+    // Objects still in the world. Separate from the billboard list so
+    // callers that only want the count do not need a SpriteSet to get it.
+    int remaining() const;
 
     int treasureTotal() const { return treasure_total_; }
     int treasureTaken() const { return treasure_taken_; }

@@ -11,6 +11,7 @@
 #include "../render/sprite_set.h"
 #include "../render/sprites.h"
 #include "../render/textures.h"
+#include "enemy.h"
 #include "items.h"
 #include "map.h"
 #include "player.h"
@@ -65,6 +66,7 @@ private:
     Map        map_;
     Player     player_;
     Items      items_;
+    Enemies    enemies_;
     Raycaster  caster_;
     TextureSet   textures_;
     SpriteSet    sprites_;

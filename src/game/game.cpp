@@ -25,6 +25,14 @@ constexpr uint32_t kMiniDoor   = rgb(0xc8, 0xa8, 0x38);
 constexpr uint32_t kMiniPlayer = rgb(0x30, 0xf0, 0x30);
 constexpr uint32_t kMiniRay    = rgb(0xf0, 0x40, 0x40);
 
+// Enemy states are colour-coded on the minimap. Watching guards change
+// colour as they notice you is the only practical way to tell a working
+// state machine from one that merely looks busy.
+constexpr uint32_t kMiniIdle    = rgb(0xc0, 0x80, 0x20);  // standing/patrolling
+constexpr uint32_t kMiniHunting = rgb(0xf0, 0x40, 0x40);  // chasing
+constexpr uint32_t kMiniFiring  = rgb(0xff, 0xf0, 0x60);  // shooting
+constexpr uint32_t kMiniCorpse  = rgb(0x60, 0x28, 0x28);
+
 } // namespace
 
 void Game::init() {
@@ -42,6 +50,7 @@ void Game::startLevel() {
     // start from a fresh copy or the second run begins half-looted.
     map_ = Map::level1();
     items_.spawnFrom(map_);
+    enemies_.spawnFrom(map_);
     player_ = Player();
     // Face east into the cell block corridor rather than at the wall behind
     // the spawn point.
@@ -79,7 +88,7 @@ void Game::updatePlaying(const Platform& in) {
     if (in.pressed(Key::TexAtlas))
         atlas_mode_ = (atlas_mode_ + 1) % kAtlasModes;
 
-    player_.update(in, map_, items_, kTickDT);
+    player_.update(in, map_, items_, enemies_, kTickDT);
     items_.collect(player_);
 
     if (in.pressed(Key::Use)) {
@@ -97,7 +106,12 @@ void Game::updatePlaying(const Platform& in) {
     // cell they just stepped into.
     map_.update(kTickDT, player_.x(), player_.y());
 
-    // Enemy AI and projectiles hang off here.
+    enemies_.update(kTickDT, map_, player_, items_);
+
+    if (player_.isDead()) {
+        state_ = GameState::Dead;
+        time_  = 0.0;
+    }
 }
 
 void Game::render(Framebuffer& fb) {
@@ -111,8 +125,9 @@ void Game::render(Framebuffer& fb) {
     // Sprites go after the walls, because they clip against the depth the
     // wall pass just recorded.
     billboards_.clear();
-    items_.appendBillboards(billboards_);
-    renderBillboards(fb, player_, caster_.depth(), billboards_, sprites_);
+    items_.appendBillboards(billboards_, sprites_);
+    enemies_.appendBillboards(billboards_, player_, actors_);
+    renderBillboards(fb, player_, caster_.depth(), billboards_);
 
     renderStatusBar(fb);
     if (show_minimap_) renderMinimap(fb);
@@ -227,6 +242,20 @@ void Game::renderMinimap(Framebuffer& fb) const {
             fb.fillRect(kMiniX + tx * kMiniScale, kMiniY + ty * kMiniScale,
                         kMiniScale, kMiniScale, c);
         }
+    }
+
+    for (const Enemy& e : enemies_.all()) {
+        uint32_t c = kMiniIdle;
+        switch (e.state) {
+        case EnemyState::Chase: c = kMiniHunting; break;
+        case EnemyState::Shoot: c = kMiniFiring;  break;
+        case EnemyState::Die:
+        case EnemyState::Dead:  c = kMiniCorpse;  break;
+        default: break;
+        }
+        fb.fillRect(static_cast<int>(kMiniX + e.x * kMiniScale) - 1,
+                    static_cast<int>(kMiniY + e.y * kMiniScale) - 1,
+                    3, 3, c);
     }
 
     const double pxf = kMiniX + player_.x() * kMiniScale;

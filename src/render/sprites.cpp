@@ -20,8 +20,7 @@ constexpr double kNearClip = 0.12;
 
 void renderBillboards(Framebuffer& fb, const Player& player,
                       const std::vector<double>& wallDepth,
-                      std::vector<Billboard>& list,
-                      const SpriteSet& sprites) {
+                      std::vector<Billboard>& list) {
     if (list.empty()) return;
 
     const double px = player.x();
@@ -46,6 +45,7 @@ void renderBillboards(Framebuffer& fb, const Player& player,
     const double invDet = 1.0 / det;
 
     for (const Billboard& b : list) {
+        if (!b.image) continue;
         const double relX = b.x - px;
         const double relY = b.y - py;
 
@@ -68,7 +68,7 @@ void renderBillboards(Framebuffer& fb, const Player& player,
         const int x1 = std::min(left + size, kScreenW);
         if (x0 >= x1) continue;
 
-        const Sprite& spr = sprites[b.sprite];
+        const Sprite& spr = *b.image;
         const double shadeF = distanceShade(transY);
 
         for (int x = x0; x < x1; ++x) {

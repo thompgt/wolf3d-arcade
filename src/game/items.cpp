@@ -123,11 +123,19 @@ void Items::collect(Player& player) {
     }
 }
 
-void Items::appendBillboards(std::vector<Billboard>& out) const {
+void Items::appendBillboards(std::vector<Billboard>& out,
+                             const SpriteSet& sprites) const {
     for (const Item& it : items_) {
         if (it.taken) continue;
-        out.push_back(Billboard{it.x, it.y, it.sprite});
+        out.push_back(Billboard{it.x, it.y, &sprites[it.sprite]});
     }
+}
+
+int Items::remaining() const {
+    int n = 0;
+    for (const Item& it : items_)
+        if (!it.taken) ++n;
+    return n;
 }
 
 bool Items::blocks(double x, double y, double r) const {

@@ -15,12 +15,17 @@
 namespace wolf {
 
 class Player;
-class SpriteSet;
+struct Sprite;
 
+// Carries the frame to draw rather than an index into one particular set.
+// Items and enemies pick their own frames from unrelated collections — an
+// enemy's depends on its facing, animation and state — so an index would
+// have to be qualified by which set it indexes, and the renderer does not
+// need to know.
 struct Billboard {
-    double  x = 0.0;
-    double  y = 0.0;
-    uint8_t sprite = 0;
+    double        x = 0.0;
+    double        y = 0.0;
+    const Sprite* image = nullptr;
 };
 
 // Draws every billboard, furthest first. `list` is sorted in place, since
@@ -28,7 +33,6 @@ struct Billboard {
 // allocating one every frame.
 void renderBillboards(Framebuffer& fb, const Player& player,
                       const std::vector<double>& wallDepth,
-                      std::vector<Billboard>& list,
-                      const SpriteSet& sprites);
+                      std::vector<Billboard>& list);
 
 } // namespace wolf

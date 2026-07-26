@@ -7,6 +7,7 @@
 #include <string>
 
 #include "core/config.h"
+#include "game/enemy.h"
 #include "game/items.h"
 #include "game/map.h"
 #include "game/player.h"
@@ -230,11 +231,7 @@ Player playerOn(Items& items, double x, double y) {
     return p;
 }
 
-int billboardCount(const Items& items) {
-    std::vector<Billboard> b;
-    items.appendBillboards(b);
-    return static_cast<int>(b.size());
-}
+int billboardCount(const Items& items) { return items.remaining(); }
 
 void testItems(Report& r) {
     r.section("items");
@@ -298,6 +295,190 @@ void testItems(Report& r) {
     r.check(!items.blocks(30.5, 30.5, 0.24), "empty floor does not block");
 }
 
+// --- enemy AI ------------------------------------------------------------
+
+// Index of the enemy standing on a given tile. Positions change once they
+// start moving, so this is only meaningful before stepping.
+int enemyAt(const Enemies& es, int tx, int ty) {
+    const std::vector<Enemy>& all = es.all();
+    for (size_t i = 0; i < all.size(); ++i) {
+        if (static_cast<int>(std::floor(all[i].x)) == tx &&
+            static_cast<int>(std::floor(all[i].y)) == ty)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+void stepAI(Enemies& es, Map& map, Player& p, const Items& items,
+            double seconds) {
+    const int ticks = static_cast<int>(seconds / kTickDT);
+    for (int i = 0; i < ticks; ++i) {
+        map.update(kTickDT, p.x(), p.y());
+        es.update(kTickDT, map, p, items);
+    }
+}
+
+void testEnemies(Report& r) {
+    r.section("enemy spawning");
+    {
+        Map m = Map::level1();
+        Enemies es;
+        es.spawnFrom(m);
+        r.check(es.total() == 13, "13 enemies spawn");
+        r.check(es.alive() == 13, "all start alive");
+        r.check(es.killed() == 0, "none start dead");
+
+        int ss = 0;
+        for (const Enemy& e : es.all())
+            if (e.type == EnemyType::SS) ++ss;
+        r.check(ss == 3, "3 of them are SS troopers");
+
+        // The SS is meant to be the harder fight, not a reskin.
+        const EnemyTuning& g = tuningFor(EnemyType::Guard);
+        const EnemyTuning& s = tuningFor(EnemyType::SS);
+        r.check(s.health > g.health, "SS is tankier than a guard");
+        r.check(s.fireInterval < g.fireInterval, "SS fires faster");
+        r.check(s.painChance < g.painChance, "SS shrugs off more hits");
+    }
+
+    // the corridor guard at (35,11), with a long clear sightline both ways.
+    r.section("enemy detection");
+    {
+        Map m = Map::level1();
+        Items items; items.spawnFrom(m);
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+        r.check(gi >= 0, "found the corridor guard at (35,11)");
+
+        // Standing behind him: he faces east, the player is west.
+        Player behind; behind.spawn(28.5, 11.5, 0.0);
+        stepAI(es, m, behind, items, 1.0);
+        r.check(es.all()[gi].state != EnemyState::Chase,
+                "does not notice the player standing behind him");
+        r.check(!es.all()[gi].alerted, "and is not alerted by it");
+    }
+    {
+        Map m = Map::level1();
+        Items items; items.spawnFrom(m);
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+
+        // In front of him, well within the cone and the sight range.
+        Player ahead; ahead.spawn(40.5, 11.5, 0.0);
+        stepAI(es, m, ahead, items, 0.6);
+        r.check(es.all()[gi].alerted, "notices a player in front of him");
+        r.check(es.all()[gi].state == EnemyState::Chase ||
+                es.all()[gi].state == EnemyState::Shoot,
+                "and reacts by closing or firing");
+    }
+
+    r.section("enemy chase and attack");
+    {
+        Map m = Map::level1();
+        Items items; items.spawnFrom(m);
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+        const double startX = es.all()[gi].x;
+
+        Player p; p.spawn(44.5, 11.5, 0.0);
+        stepAI(es, m, p, items, 1.5);
+        r.check(es.all()[gi].x > startX + 0.3,
+                "closes the distance once it has seen you");
+
+        // Given long enough it must actually land shots. Accuracy is
+        // random but the generator is seeded, so this is reproducible.
+        stepAI(es, m, p, items, 8.0);
+        r.check(p.health() < 100, "a guard that can see you does damage");
+        r.check(p.health() > 0 || p.isDead(), "damage is applied coherently");
+    }
+
+    r.section("enemy damage and death");
+    {
+        Map m = Map::level1();
+        Items items; items.spawnFrom(m);
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+
+        r.check(es.applyDamage(gi, 5) == 0, "a survivable hit scores nothing");
+        r.check(es.all()[gi].alerted, "being shot alerts, even from behind");
+
+        const int score = es.applyDamage(gi, 999);
+        r.check(score == tuningFor(EnemyType::Guard).score,
+                "the killing blow scores");
+        r.check(es.all()[gi].state == EnemyState::Die, "starts dying");
+        r.check(es.killed() == 1, "kill is counted");
+        r.check(es.alive() == 12, "and no longer counts as alive");
+        r.check(es.applyDamage(gi, 999) == 0, "a corpse cannot be killed twice");
+
+        // Corpses must stop being obstacles or doorways silt up with bodies.
+        r.check(!es.blocks(es.all()[gi].x, es.all()[gi].y, 0.24),
+                "a corpse does not block the player");
+
+        Player p; p.spawn(44.5, 11.5, 0.0);
+        stepAI(es, m, p, items, 1.0);
+        r.check(es.all()[gi].state == EnemyState::Dead,
+                "death animation finishes and settles");
+    }
+
+    r.section("hitscan tracing");
+    {
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        const int gi = enemyAt(es, 35, 11);
+
+        // West along the corridor, straight at him.
+        r.check(es.traceHit(m, 40.5, 11.5, -1.0, 0.0, 20.0) == gi,
+                "traces a hit down the corridor");
+        // East, away from him.
+        r.check(es.traceHit(m, 40.5, 11.5, 1.0, 0.0, 20.0) == -1,
+                "misses when aimed the other way");
+        // Correct direction but out of range.
+        r.check(es.traceHit(m, 40.5, 11.5, -1.0, 0.0, 2.0) == -1,
+                "range limits the shot");
+        // Through the guard room wall at a guard beyond it.
+        r.check(es.traceHit(m, 5.5, 8.5, 1.0, 0.0, 40.0) == -1,
+                "a wall stops the bullet");
+    }
+
+    r.section("noise alerting");
+    {
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        const int corridor = enemyAt(es, 35, 11);
+        const int guardRoom = enemyAt(es, 18, 8);
+
+        // A shot fired in the corridor, in the open.
+        es.alertToNoise(m, 40.5, 11.5, 20.0);
+        r.check(es.all()[corridor].state == EnemyState::Chase,
+                "gunfire in the open wakes a guard down the corridor");
+
+        // The same shot must not carry through the cell block wall, or
+        // firing once wakes the entire level and there is no reason ever
+        // to stop shooting.
+        Enemies es2; es2.spawnFrom(m);
+        es2.alertToNoise(m, 5.5, 8.5, 30.0);
+        r.check(es2.all()[guardRoom].state != EnemyState::Chase,
+                "gunfire does not carry through a wall");
+    }
+
+    r.section("AI determinism");
+    {
+        // Two identical runs must agree exactly. A guard whose accuracy came
+        // from an unseeded generator would make every test above flaky.
+        auto run = []() {
+            Map m = Map::level1();
+            Items items; items.spawnFrom(m);
+            Enemies es; es.spawnFrom(m);
+            Player p; p.spawn(44.5, 11.5, 0.0);
+            stepAI(es, m, p, items, 6.0);
+            return p.health();
+        };
+        const int a = run();
+        const int b = run();
+        r.check(a == b, "the same scenario produces the same outcome");
+    }
+}
+
 } // namespace
 
 int runSelfTest() {
@@ -309,6 +490,7 @@ int runSelfTest() {
     testExit(r);
     testRays(r);
     testItems(r);
+    testEnemies(r);
 
     std::ostringstream out;
     out << "wolf3d-arcade self-test\n" << r.log.str() << "\n"
