@@ -8,8 +8,12 @@ The only dependency is Win32 itself: the renderer draws into a 320x200
 32-bit buffer and blits it to the window with `StretchDIBits`, which is
 about as close as you can get today to how the original worked.
 
-> Status: **Phase 0 complete** — window, frame loop and state machine are
-> up. See [WORKPLAN.md](WORKPLAN.md) for what lands next.
+> Status: **Phase 1 complete** — the raycaster is up. You can walk level 1
+> with correct perspective and solid collision; walls are still flat-shaded
+> until textures land in phase 2. See [WORKPLAN.md](WORKPLAN.md) for what
+> comes next.
+
+![Level 1 with the debug minimap](docs/phase1.png)
 
 ## Build
 
@@ -51,6 +55,8 @@ sidesteps it and makes `wolf3d.exe` portable on its own.
 | `F` | Slow-mo |
 | `Enter` | Start |
 | `Esc` | Back / quit |
+| `M` | Debug: toggle top-down minimap |
+| `F12` | Debug: write the current frame to `shot.bmp` |
 
 Later-phase controls are already bound; they do nothing until their phase
 lands.

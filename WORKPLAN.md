@@ -26,26 +26,33 @@ flat ceiling/floor/status-bar view, Escape quits.
 
 ---
 
-## Phase 1 — Map and movement `[ ]`
+## Phase 1 — Map and movement `[x]`
 
 The raycaster, untextured. This is the load-bearing phase; get the math
 right here and everything after it is decoration.
 
-- [ ] `game/map.h|cpp` — tile grid, one hand-authored 64x64 level (E1M1-style:
-      cell block, guard room, mess hall, courtyard, exit corridor)
-- [ ] Tile taxonomy: solid wall (with texture id), door, pushwall, floor,
-      spawn point, enemy spawn, pickup spawn
-- [ ] `game/player.h|cpp` — position/direction/camera-plane, forward+strafe
+- [x] `game/map.h|cpp` — tile grid, one hand-authored 48x48 level (cell
+      block, guard room, storeroom, mess hall, courtyard, armory, exit hall)
+- [x] Tile taxonomy: solid wall (with texture id), door, locked door,
+      pushwall, exit switch, plus a spawn list for actors/pickups/decor
+- [x] `game/player.h|cpp` — position/direction/camera-plane, forward+strafe
       movement, keyboard turn, mouselook from `Platform::mouseDX()`
-- [ ] Collision: circle-vs-grid, axis-separated so sliding along walls feels
+- [x] Collision: circle-vs-grid, axis-separated so sliding along walls feels
       right rather than sticking
-- [ ] `render/raycast.cpp` — DDA grid traversal, perpendicular distance
-      (avoids fisheye), per-column wall height
-- [ ] Flat-colour walls, darker on N/S faces, distance shading
-- [ ] Debug overlay: toggleable top-down minimap with the player's rays
+- [x] `render/raycast.cpp` — DDA grid traversal, perpendicular distance
+      (avoids fisheye), per-column wall height, per-column depth buffer
+- [x] Flat-colour walls, darker on edge-on faces, 16-band distance shading
+- [x] Debug overlay: toggleable top-down minimap (`M`) with player facing
+- [x] `core/bmp.cpp` + `F12` — dump the real framebuffer, since compositor
+      capture of a direct-blit window returns stale frames
+
+Level authored at 48x48 rather than the original's 64x64: a hand-written
+floor plan that size stays legible in the source, and the level fills it
+rather than leaving a third of the grid as dead space.
 
 **Done when:** you can walk the whole map, walls look solid, no fisheye
-warp, and you cannot clip through geometry.
+warp, and you cannot clip through geometry. ✔ verified by driving the built
+game and dumping its own frames.
 
 ---
 
