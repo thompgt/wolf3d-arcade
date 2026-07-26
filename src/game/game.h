@@ -1,12 +1,12 @@
 // Top-level game object: owns the world, steps the simulation on a fixed
 // tick, and draws one frame. Everything the main loop needs is here.
-//
-// Scaffold status: the state machine and frame skeleton are in place; the
-// world simulation and 3D renderer land in later phases (see WORKPLAN.md).
 #pragma once
 
 #include "../core/framebuffer.h"
 #include "../platform/win32_app.h"
+#include "../render/raycast.h"
+#include "map.h"
+#include "player.h"
 
 namespace wolf {
 
@@ -24,22 +24,31 @@ public:
     // Advances the world by exactly one fixed tick (kTickDT seconds).
     void update(const Platform& in);
 
-    // Renders the current state into fb. Never mutates game state, so it can
-    // be skipped freely when we're behind on ticks.
-    void render(Framebuffer& fb) const;
+    // Renders the current state into fb. Render state (the depth buffer)
+    // lives in the raycaster, so this is non-const, but it never touches
+    // simulation state — frames can be skipped freely.
+    void render(Framebuffer& fb);
 
     bool wantsQuit() const { return quit_; }
 
 private:
+    void startLevel();
     void updateTitle(const Platform& in);
     void updatePlaying(const Platform& in);
 
     void renderTitle(Framebuffer& fb) const;
-    void renderWorld(Framebuffer& fb) const;
+    void renderStatusBar(Framebuffer& fb) const;
+    // Debug aid: top-down view of the level with the player's facing.
+    void renderMinimap(Framebuffer& fb) const;
 
     GameState state_ = GameState::Title;
     double    time_  = 0.0;   // seconds of simulated time
     bool      quit_  = false;
+    bool      show_minimap_ = false;
+
+    Map       map_;
+    Player    player_;
+    Raycaster caster_;
 };
 
 } // namespace wolf

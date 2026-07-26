@@ -1,5 +1,7 @@
 #include "game.h"
 
+#include <cmath>
+
 #include "../core/config.h"
 
 namespace wolf {
@@ -7,18 +9,35 @@ namespace {
 
 // Placeholder palette. The real one is generated alongside the procedural
 // textures in a later phase.
-constexpr uint32_t kCeiling  = rgb(0x38, 0x38, 0x38);
-constexpr uint32_t kFloor    = rgb(0x70, 0x70, 0x70);
 constexpr uint32_t kBarFace  = rgb(0x00, 0x54, 0x00);
 constexpr uint32_t kBarEdge  = rgb(0x00, 0x2c, 0x00);
 constexpr uint32_t kTitleBg  = rgb(0x18, 0x10, 0x10);
 constexpr uint32_t kTitleFg  = rgb(0xd8, 0xa8, 0x28);
 
+// Minimap: pixels per tile, and where it sits on screen.
+constexpr int kMiniScale = 3;
+constexpr int kMiniX     = 4;
+constexpr int kMiniY     = 4;
+
+constexpr uint32_t kMiniFloor  = rgb(0x20, 0x20, 0x20);
+constexpr uint32_t kMiniWall   = rgb(0xb0, 0xb0, 0xb0);
+constexpr uint32_t kMiniDoor   = rgb(0xc8, 0xa8, 0x38);
+constexpr uint32_t kMiniPlayer = rgb(0x30, 0xf0, 0x30);
+constexpr uint32_t kMiniRay    = rgb(0xf0, 0x40, 0x40);
+
 } // namespace
 
 void Game::init() {
+    map_   = Map::level1();
     state_ = GameState::Title;
     time_  = 0.0;
+}
+
+void Game::startLevel() {
+    // Face east into the cell block corridor rather than at the wall behind
+    // the spawn point.
+    player_.spawn(map_.startX(), map_.startY(), 0.0);
+    state_ = GameState::Playing;
 }
 
 void Game::update(const Platform& in) {
@@ -43,38 +62,62 @@ void Game::update(const Platform& in) {
 }
 
 void Game::updateTitle(const Platform& in) {
-    if (in.pressed(Key::Start)) state_ = GameState::Playing;
+    if (in.pressed(Key::Start)) startLevel();
 }
 
-void Game::updatePlaying(const Platform& /*in*/) {
-    // Player movement, doors, enemy AI and projectiles hang off here.
+void Game::updatePlaying(const Platform& in) {
+    if (in.pressed(Key::Minimap)) show_minimap_ = !show_minimap_;
+    player_.update(in, map_, kTickDT);
+    // Doors, enemy AI and projectiles hang off here.
 }
 
-void Game::render(Framebuffer& fb) const {
+void Game::render(Framebuffer& fb) {
     if (state_ == GameState::Title) {
         renderTitle(fb);
         return;
     }
-    renderWorld(fb);
+
+    caster_.render(fb, map_, player_);
+    renderStatusBar(fb);
+    if (show_minimap_) renderMinimap(fb);
 }
 
 void Game::renderTitle(Framebuffer& fb) const {
     fb.clear(kTitleBg);
     // Stand-in for the title art until the font and menu land: a pulsing
     // band so it is obvious at a glance that the loop is running.
-    const int pulse = static_cast<int>((1.0 + 0.9) * 6);
+    const int pulse = 4 + static_cast<int>(3.0 * (1.0 + std::sin(time_ * 3.0)));
     fb.fillRect(40, kScreenH / 2 - pulse, kScreenW - 80, pulse * 2, kTitleFg);
 }
 
-void Game::renderWorld(Framebuffer& fb) const {
-    // Flat ceiling and floor across the 3D viewport. The raycaster will
-    // overwrite the wall columns between them.
-    fb.fillRect(0, 0, kScreenW, kViewH / 2, kCeiling);
-    fb.fillRect(0, kViewH / 2, kScreenW, kViewH - kViewH / 2, kFloor);
-
-    // Status bar shell. Contents (face, health, ammo, keys) come later.
+void Game::renderStatusBar(Framebuffer& fb) const {
+    // Shell only; contents (face, health, ammo, keys) come later.
     fb.fillRect(0, kViewH, kScreenW, kStatusBarH, kBarFace);
     fb.fillRect(0, kViewH, kScreenW, 1, kBarEdge);
+}
+
+void Game::renderMinimap(Framebuffer& fb) const {
+    for (int ty = 0; ty < map_.height(); ++ty) {
+        for (int tx = 0; tx < map_.width(); ++tx) {
+            uint32_t c;
+            if (map_.isDoor(tx, ty))        c = kMiniDoor;
+            else if (map_.isSolid(tx, ty))  c = kMiniWall;
+            else                            c = kMiniFloor;
+            fb.fillRect(kMiniX + tx * kMiniScale, kMiniY + ty * kMiniScale,
+                        kMiniScale, kMiniScale, c);
+        }
+    }
+
+    const double pxf = kMiniX + player_.x() * kMiniScale;
+    const double pyf = kMiniY + player_.y() * kMiniScale;
+
+    // A short facing whisker, so it is obvious which way the camera looks.
+    for (int i = 0; i < 8; ++i) {
+        fb.put(static_cast<int>(pxf + player_.dirX() * i),
+               static_cast<int>(pyf + player_.dirY() * i), kMiniRay);
+    }
+    fb.fillRect(static_cast<int>(pxf) - 1, static_cast<int>(pyf) - 1,
+                3, 3, kMiniPlayer);
 }
 
 } // namespace wolf
