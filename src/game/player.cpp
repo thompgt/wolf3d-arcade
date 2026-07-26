@@ -1,8 +1,10 @@
 #include "player.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "../core/config.h"
+#include "items.h"
 #include "../platform/win32_app.h"
 
 namespace wolf {
@@ -14,6 +16,23 @@ namespace {
 const double kPlaneLen = std::tan(kFov * 0.5);
 
 } // namespace
+
+namespace {
+constexpr int kMaxHealth = 100;
+constexpr int kMaxAmmo   = 99;
+} // namespace
+
+bool Player::giveHealth(int amount) {
+    if (health_ >= kMaxHealth) return false;
+    health_ = std::min(health_ + amount, kMaxHealth);
+    return true;
+}
+
+bool Player::giveAmmo(int amount) {
+    if (ammo_ >= kMaxAmmo) return false;
+    ammo_ = std::min(ammo_ + amount, kMaxAmmo);
+    return true;
+}
 
 void Player::spawn(double x, double y, double angle) {
     x_ = x;
@@ -35,7 +54,8 @@ void Player::setAngle(double a) {
     plane_y_ =  dir_x_ * kPlaneLen;
 }
 
-void Player::update(const Platform& in, const Map& map, double dt) {
+void Player::update(const Platform& in, const Map& map, const Items& items,
+                    double dt) {
     // --- turning -----------------------------------------------------
     double turn = 0.0;
     if (in.down(Key::TurnLeft))  turn -= tuning_.turnSpeed * dt;
@@ -67,15 +87,17 @@ void Player::update(const Platform& in, const Map& map, double dt) {
 
     const double dx = (dir_x_ * fwd + rightX * strafe) * speed * dt;
     const double dy = (dir_y_ * fwd + rightY * strafe) * speed * dt;
-    moveWithCollision(map, dx, dy);
+    moveWithCollision(map, items, dx, dy);
 }
 
-void Player::moveWithCollision(const Map& map, double dx, double dy) {
-    if (!collides(map, x_ + dx, y_)) x_ += dx;
-    if (!collides(map, x_, y_ + dy)) y_ += dy;
+void Player::moveWithCollision(const Map& map, const Items& items,
+                               double dx, double dy) {
+    if (!collides(map, items, x_ + dx, y_)) x_ += dx;
+    if (!collides(map, items, x_, y_ + dy)) y_ += dy;
 }
 
-bool Player::collides(const Map& map, double x, double y) const {
+bool Player::collides(const Map& map, const Items& items,
+                      double x, double y) const {
     const double r = tuning_.radius;
     const int x0 = static_cast<int>(std::floor(x - r));
     const int x1 = static_cast<int>(std::floor(x + r));
@@ -90,7 +112,10 @@ bool Player::collides(const Map& map, double x, double y) const {
 
     // A pushwall in motion is off the grid, so it needs its own test — and
     // it must push the player rather than swallow them.
-    return map.hitsPushwall(x, y, r);
+    if (map.hitsPushwall(x, y, r)) return true;
+
+    // Lamps and tables are billboards, not cells.
+    return items.blocks(x, y, r);
 }
 
 } // namespace wolf

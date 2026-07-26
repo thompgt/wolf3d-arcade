@@ -4,8 +4,13 @@
 
 #include "../core/framebuffer.h"
 #include "../platform/win32_app.h"
+#include <vector>
+
 #include "../render/raycast.h"
+#include "../render/sprite_set.h"
+#include "../render/sprites.h"
 #include "../render/textures.h"
+#include "items.h"
 #include "map.h"
 #include "player.h"
 
@@ -49,13 +54,22 @@ private:
     double    time_  = 0.0;   // seconds of simulated time
     bool      quit_  = false;
     bool      show_minimap_ = false;
-    bool      show_atlas_   = false;
+    // 0 off, 1 wall textures, 2 object sprites. Cycled by T; both sets are
+    // too tall to show at once at 320x200.
+    int       atlas_mode_   = 0;
     UseResult use_result_   = UseResult::Nothing;
 
     Map        map_;
     Player     player_;
+    Items      items_;
     Raycaster  caster_;
     TextureSet textures_;
+    SpriteSet  sprites_;
+
+    // Rebuilt every frame from whatever is currently in the world. Kept as
+    // a member so the per-frame sort reuses this allocation instead of
+    // making a new one sixty times a second.
+    std::vector<Billboard> billboards_;
 };
 
 } // namespace wolf

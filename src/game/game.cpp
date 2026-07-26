@@ -29,12 +29,19 @@ constexpr uint32_t kMiniRay    = rgb(0xf0, 0x40, 0x40);
 
 void Game::init() {
     textures_.generate();
+    sprites_.generate();
     map_   = Map::level1();
     state_ = GameState::Title;
     time_  = 0.0;
 }
 
 void Game::startLevel() {
+    // Rebuilt rather than reused: the level carries mutable state now
+    // (open doors, moved secrets, collected pickups), so restarting has to
+    // start from a fresh copy or the second run begins half-looted.
+    map_ = Map::level1();
+    items_.spawnFrom(map_);
+    player_ = Player();
     // Face east into the cell block corridor rather than at the wall behind
     // the spawn point.
     player_.spawn(map_.startX(), map_.startY(), 0.0);
@@ -68,9 +75,10 @@ void Game::updateTitle(const Platform& in) {
 
 void Game::updatePlaying(const Platform& in) {
     if (in.pressed(Key::Minimap))  show_minimap_ = !show_minimap_;
-    if (in.pressed(Key::TexAtlas)) show_atlas_   = !show_atlas_;
+    if (in.pressed(Key::TexAtlas)) atlas_mode_ = (atlas_mode_ + 1) % 3;
 
-    player_.update(in, map_, kTickDT);
+    player_.update(in, map_, items_, kTickDT);
+    items_.collect(player_);
 
     if (in.pressed(Key::Use)) {
         const UseResult r = map_.use(player_.x(), player_.y(),
@@ -97,24 +105,43 @@ void Game::render(Framebuffer& fb) {
     }
 
     caster_.render(fb, map_, player_, textures_);
+
+    // Sprites go after the walls, because they clip against the depth the
+    // wall pass just recorded.
+    billboards_.clear();
+    items_.appendBillboards(billboards_);
+    renderBillboards(fb, player_, caster_.depth(), billboards_, sprites_);
+
     renderStatusBar(fb);
     if (show_minimap_) renderMinimap(fb);
-    if (show_atlas_)   renderTexAtlas(fb);
+    if (atlas_mode_)   renderTexAtlas(fb);
 }
 
 void Game::renderTexAtlas(Framebuffer& fb) const {
-    // Four across, two down: the whole set at 1:1 with room to spare.
     constexpr int kCols = 4;
     constexpr int kPad  = 2;
+    const int count = (atlas_mode_ == 1) ? static_cast<int>(TexCount)
+                                         : static_cast<int>(SprCount);
     const int originX = (kScreenW - (kCols * (kTexSize + kPad) - kPad)) / 2;
-    const int originY = 8;
+    const int originY = 4;
 
-    for (int i = 0; i < TexCount; ++i) {
+    for (int i = 0; i < count; ++i) {
         const int ox = originX + (i % kCols) * (kTexSize + kPad);
         const int oy = originY + (i / kCols) * (kTexSize + kPad);
-        for (int y = 0; y < kTexSize; ++y)
-            for (int x = 0; x < kTexSize; ++x)
-                fb.put(ox + x, oy + y, textures_[i].at(x, y));
+        for (int y = 0; y < kTexSize; ++y) {
+            for (int x = 0; x < kTexSize; ++x) {
+                if (atlas_mode_ == 1) {
+                    fb.put(ox + x, oy + y, textures_[i].at(x, y));
+                } else {
+                    // Sprites are mostly empty, so they get a flat backdrop
+                    // — against the 3D view you cannot tell a transparent
+                    // pixel from a dark one.
+                    const uint32_t c = sprites_[i].at(x, y);
+                    fb.put(ox + x, oy + y,
+                           isTransparent(c) ? rgb(0x30, 0x30, 0x38) : c);
+                }
+            }
+        }
     }
 }
 

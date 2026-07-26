@@ -11,6 +11,7 @@
 namespace wolf {
 
 class Platform;
+class Items;
 
 // Tuning. Speeds are in tiles per second, turn rates in radians per second.
 struct PlayerTuning {
@@ -26,7 +27,10 @@ class Player {
 public:
     void spawn(double x, double y, double angle);
 
-    void update(const Platform& in, const Map& map, double dt);
+    // Items is passed in because blocking scenery — a lamp, a table — is not
+    // on the tile grid and so cannot be found by any amount of map lookup.
+    void update(const Platform& in, const Map& map, const Items& items,
+                double dt);
 
     double x() const { return x_; }
     double y() const { return y_; }
@@ -45,18 +49,36 @@ public:
     void giveGoldKey()   { gold_key_ = true; }
     void giveSilverKey() { silver_key_ = true; }
 
+    int  health() const { return health_; }
+    int  ammo()   const { return ammo_; }
+    int  score()  const { return score_; }
+    int  lives()  const { return lives_; }
+    bool hasMachineGun() const { return machine_gun_; }
+    bool hasChaingun()   const { return chaingun_; }
+
+    // Pickups return false when the player is already topped up, so an item
+    // is left in the world rather than wasted — the original did the same,
+    // and it stops a full-health player hoovering up the medkit they will
+    // want on the way back.
+    bool giveHealth(int amount);
+    bool giveAmmo(int amount);
+    void addScore(int amount) { score_ += amount; }
+    void giveMachineGun() { machine_gun_ = true; }
+    void giveChaingun()   { chaingun_ = true; }
+
 private:
     void setAngle(double a);
 
     // Moves along one axis at a time and reverts only the axis that hit
     // something. That separation is what lets the player slide along a wall
     // instead of sticking to it when walking into it at an angle.
-    void moveWithCollision(const Map& map, double dx, double dy);
+    void moveWithCollision(const Map& map, const Items& items,
+                           double dx, double dy);
 
     // True if a circle of the player's radius at (x, y) overlaps any solid
     // cell. Checked against the tile span the circle covers, so a corner
     // never slips through diagonally.
-    bool collides(const Map& map, double x, double y) const;
+    bool collides(const Map& map, const Items& items, double x, double y) const;
 
     double x_ = 1.5, y_ = 1.5;
     double angle_ = 0.0;
@@ -65,6 +87,13 @@ private:
 
     bool gold_key_   = false;
     bool silver_key_ = false;
+
+    int  health_ = 100;
+    int  ammo_   = 8;
+    int  score_  = 0;
+    int  lives_  = 3;
+    bool machine_gun_ = false;
+    bool chaingun_    = false;
 
     PlayerTuning tuning_;
 };
