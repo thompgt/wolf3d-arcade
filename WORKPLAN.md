@@ -100,18 +100,22 @@ refuse without the key, and the secret is findable. ✔
 
 ---
 
-## Phase 4 — Sprites and pickups `[ ]`
+## Phase 4 — Sprites and pickups `[x]`
 
-- [ ] `render/sprites.cpp` — billboard projection, per-column depth buffer
-      written by the raycaster so sprites clip correctly behind walls
-- [ ] Back-to-front sort by squared distance
-- [ ] Transparent-colour blitting with column scaling
-- [ ] Pickups: health (dog food / first aid), ammo clip, treasure ×4,
-      gold key, silver key, machine gun, chaingun
-- [ ] Static decor: lamps, tables, barrels — some blocking, some not
+- [x] `render/sprites.cpp` — billboard projection, clipped per column
+      against the depth buffer the raycaster writes
+- [x] Back-to-front sort by squared distance
+- [x] Transparency via the DIB's unused top byte, with column scaling
+- [x] `render/sprite_set.cpp` — 12 procedurally drawn sprites
+- [x] Pickups: first aid, ammo clip, treasure ×4, gold key, silver key,
+      machine gun, chaingun
+- [x] Scenery: lamps and tables, blocking via a circle test rather than a
+      tile, since a solid tile would also stop rays
+- [x] Sprite atlas added to the debug view (`T` now cycles walls → sprites)
+- [x] 17 more self-test checks (63 total)
 
 **Done when:** sprites are correctly occluded by walls, scale with distance,
-and pickups apply their effect and vanish on touch.
+and pickups apply their effect and vanish on touch. ✔
 
 ---
 
