@@ -156,18 +156,36 @@ die with a proper animation. ✔
 
 ---
 
-## Phase 6 — Weapons `[ ]`
+## Phase 6 — Weapons `[x]`
 
-- [ ] `game/weapons.h|cpp` — tuning table for knife / pistol / machine gun /
+- [x] `game/weapons.h|cpp` — tuning table for knife / pistol / machine gun /
       chaingun: rate of fire, damage, ammo use, spread
-- [ ] Hitscan resolution: nearest actor within the aim cone, wall-blocked
-- [ ] Weapon-switch on keys 1–4, gated on ownership + ammo
-- [ ] Bottom-centre weapon sprite, procedurally drawn, with fire animation
-      and muzzle flash lighting the view for one frame
-- [ ] Ammo pool shared across firearms, knife always available
+- [x] Hitscan resolution: nearest actor within the aim cone, wall-blocked
+- [x] Weapon-switch on keys 1–4, gated on ownership + ammo
+- [x] Bottom-centre weapon sprite, procedurally drawn, with fire animation
+      and muzzle flash lighting the view
+- [x] Ammo pool shared across firearms, knife always available
+- [x] Gunfire wakes guards through open space; the knife is silent
+- [x] 35 more self-test checks (129 total)
+
+The flash lights the view for several frames rather than the one this plan
+called for: at 60Hz a single-frame wash is gone before the eye registers it,
+so the thing meant to sell the shot was invisible.
+
+Two things surfaced only by driving the built game and dumping frames, and
+neither is visible in source. The first pass at the art drew the fist as a
+full-width block to the bottom of the frame, which swallowed every weapon it
+was holding. And the muzzle flash ran off the top of the sprite on the
+recoil frame, where the frame edge sliced it flat.
+
+`Game` also had to move to the heap in `main`. It holds every generated
+sprite by value and the weapon set pushed it past two megabytes; because a
+compiler reserves a function's whole frame in its prologue, as a local it
+blew the stack on entry to `main` — taking `--selftest` down with it, despite
+that branch returning long before the object would have been constructed.
 
 **Done when:** all four weapons feel distinct and the chaingun can stagger a
-guard chain with pain-state lock.
+guard chain with pain-state lock. ✔
 
 ---
 

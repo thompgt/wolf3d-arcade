@@ -8,11 +8,11 @@ The only dependency is Win32 itself: the renderer draws into a 320x200
 32-bit buffer and blits it to the window with `StretchDIBits`, which is
 about as close as you can get today to how the original worked.
 
-> Status: **Phase 5 complete** — raycaster, procedural textures, doors and
-> secrets, billboard sprites, and enemy AI. You can walk level 1, open
-> doors, shove pushwalls, collect pickups and reach the exit, and guards
-> now patrol, spot you, chase and shoot back. Weapons are next.
-> See [WORKPLAN.md](WORKPLAN.md).
+> Status: **Phase 6 complete** — raycaster, procedural textures, doors and
+> secrets, billboard sprites, enemy AI and weapons. You can walk level 1,
+> open doors, shove pushwalls, collect pickups and reach the exit; guards
+> patrol, spot you, chase and shoot back; and you can shoot back at them
+> with four weapons. The HUD is next. See [WORKPLAN.md](WORKPLAN.md).
 
 ![A doorway in level 1](docs/phase3.png)
 
@@ -27,6 +27,17 @@ rivets lit from the upper left. Press `T` in game to page through them flat:
 ![The generated texture set](docs/textures.png)
 
 ![The generated sprite set](docs/sprites.png)
+
+The weapons are drawn the same way — knife, pistol, machine gun and
+chaingun, four frames each, at rest and firing:
+
+![The four weapons](docs/weapons.png)
+
+All four are held by the same gloved fist, drawn by one routine, so they
+read as one person's hands rather than four unrelated pictures. The
+chaingun's barrel cluster is phase-shifted thirty degrees a frame with the
+far-side barrels drawn darker, which is what makes a static sprite read as
+spinning rather than as a ring of dots.
 
 ## Build
 
@@ -75,11 +86,15 @@ sidesteps it and makes `wolf3d.exe` portable on its own.
 | `Enter` | Start |
 | `Esc` | Back / quit |
 | `M` | Debug: toggle top-down minimap |
-| `T` | Debug: cycle flat atlas — walls, then sprites |
+| `T` | Debug: cycle flat atlas — walls, objects, guards, weapons |
 | `F12` | Debug: write the current frame to `shot.bmp` |
 
-Later-phase controls are already bound; they do nothing until their phase
-lands.
+The pistol fires on each press and the machine gun and chaingun fire for as
+long as you hold the trigger. The knife costs no ammo and — unlike the
+firearms — does not wake every guard within earshot, which is the reason to
+carry it once you have something better.
+
+`Shift`, `Q`, `G` and `F` are bound but do nothing until phase 8 lands.
 
 ## Layout
 
