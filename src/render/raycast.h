@@ -16,6 +16,7 @@ namespace wolf {
 
 class Map;
 class Player;
+class TextureSet;
 
 // What a single ray hit. Kept public because sprites, weapon hitscans and
 // the Use key all want to cast rays too.
@@ -41,7 +42,8 @@ public:
     Raycaster() : depth_(kScreenW, 1e30) {}
 
     // Draws ceiling, floor and every wall column into the top kViewH rows.
-    void render(Framebuffer& fb, const Map& map, const Player& player);
+    void render(Framebuffer& fb, const Map& map, const Player& player,
+                const TextureSet& textures);
 
     // Per-column wall distance from the last render(). Sprites test against
     // this to know which columns of themselves are hidden behind geometry.
