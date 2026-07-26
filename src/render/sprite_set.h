@@ -14,8 +14,7 @@
 #include <array>
 #include <cstdint>
 
-#include "../core/config.h"
-#include "../core/framebuffer.h"
+#include "sprite.h"
 
 namespace wolf {
 
@@ -33,18 +32,6 @@ enum SpriteId : uint8_t {
     SprLamp,
     SprTable,
     SprCount
-};
-
-struct Sprite {
-    std::array<uint32_t, kTexSize * kTexSize> px{};
-
-    uint32_t at(int x, int y) const {
-        return px[static_cast<size_t>(y) * kTexSize + x];
-    }
-    void set(int x, int y, uint32_t c) {
-        if (x < 0 || x >= kTexSize || y < 0 || y >= kTexSize) return;
-        px[static_cast<size_t>(y) * kTexSize + x] = c;
-    }
 };
 
 class SpriteSet {
