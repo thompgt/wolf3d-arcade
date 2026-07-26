@@ -40,6 +40,91 @@ double bandedShade(double dist, bool sideY) {
 
 } // namespace
 
+namespace {
+
+// Tests the ray against a door's slab, which sits at the middle of its cell
+// rather than flush with the cell edge. That inset is what makes a doorway
+// look like a doorway: you can see the jamb around a recessed door.
+//
+// Returns false when the ray misses the slab entirely — either it left the
+// cell before reaching the midline, or it went through the gap a partly
+// open door has left behind. In both cases the DDA must carry on rather
+// than stop, which is exactly what lets you see through an open door.
+bool hitDoorSlab(const Door& d, double px, double py, double dx, double dy,
+                 RayHit& out) {
+    // Perpendicular distance to the slab's plane. Identical in form to the
+    // wall case, so the result is directly comparable.
+    const double denom = d.spansX ? dy : dx;
+    if (denom == 0.0) return false;
+
+    const double plane = (d.spansX ? d.ty : d.tx) + 0.5;
+    const double t = ((d.spansX ? plane - py : plane - px)) / denom;
+    if (t <= 0.0) return false;
+
+    // Where along the slab the ray crosses, as a 0..1 fraction of the cell.
+    const double along = d.spansX ? (px + t * dx) - d.tx
+                                  : (py + t * dy) - d.ty;
+    if (along < 0.0 || along >= 1.0) return false;   // left the cell first
+
+    // The slab has receded by `openness` into its pocket, so the doorway is
+    // clear over [0, openness) and the panel covers the rest.
+    if (along < d.openness) return false;
+
+    out.hit      = true;
+    out.isDoor   = true;
+    out.perpDist = t;
+    out.mapX     = d.tx;
+    out.mapY     = d.ty;
+    out.sideY    = d.spansX;
+    // Texture slides with the panel rather than staying pinned to the cell,
+    // so an opening door looks like it is moving instead of dissolving.
+    out.wallX    = along - d.openness;
+    out.tex      = TexDoor;
+    return true;
+}
+
+// Slab-style intersection with a pushwall in motion. A secret in transit is
+// an axis-aligned box that has left the grid, so it cannot be found by the
+// DDA and is tested separately against the whole ray.
+bool hitPushwallBox(const Pushwall& p, double px, double py,
+                    double dx, double dy, RayHit& out) {
+    // Standard slab method: the entry distance is the largest of the two
+    // per-axis entries, the exit the smallest of the two exits.
+    const double invX = (dx == 0.0) ? 1e30 : 1.0 / dx;
+    const double invY = (dy == 0.0) ? 1e30 : 1.0 / dy;
+
+    double tx0 = (p.x - px) * invX;
+    double tx1 = (p.x + 1.0 - px) * invX;
+    if (tx0 > tx1) std::swap(tx0, tx1);
+
+    double ty0 = (p.y - py) * invY;
+    double ty1 = (p.y + 1.0 - py) * invY;
+    if (ty0 > ty1) std::swap(ty0, ty1);
+
+    const double tEnter = std::max(tx0, ty0);
+    const double tExit  = std::min(tx1, ty1);
+    if (tEnter > tExit || tExit <= 0.0) return false;
+    if (tEnter <= 0.0) return false;   // camera is inside the box
+
+    // Whichever axis was entered last is the face we struck.
+    const bool sideY = ty0 > tx0;
+    out.hit        = true;
+    out.isPushwall = true;
+    out.perpDist   = tEnter;
+    out.sideY      = sideY;
+    out.mapX       = static_cast<int>(std::floor(p.x));
+    out.mapY       = static_cast<int>(std::floor(p.y));
+    out.tex        = p.tex;
+
+    const double hx = px + tEnter * dx;
+    const double hy = py + tEnter * dy;
+    const double along = sideY ? hx - p.x : hy - p.y;
+    out.wallX = along - std::floor(along);
+    return true;
+}
+
+} // namespace
+
 RayHit castRay(const Map& map, double px, double py, double dx, double dy,
                double maxDist) {
     RayHit out;
@@ -72,10 +157,13 @@ RayHit castRay(const Map& map, double px, double py, double dx, double dy,
     }
 
     bool sideY = false;
+    bool cameFromDoor = false;   // was the previous cell a doorway?
+
     // The map border is solid, so this terminates; the step cap is only a
     // guard against a malformed level or a degenerate direction vector.
     for (int steps = 0; steps < 256; ++steps) {
         // Advance whichever grid line is nearer.
+        const bool wasDoorCell = map.isDoor(mapX, mapY);
         if (sideDistX < sideDistY) {
             sideDistX += deltaX;
             mapX += stepX;
@@ -84,6 +172,17 @@ RayHit castRay(const Map& map, double px, double py, double dx, double dy,
             sideDistY += deltaY;
             mapY += stepY;
             sideY = true;
+        }
+        cameFromDoor = wasDoorCell;
+
+        if (const Door* d = map.doorAt(mapX, mapY)) {
+            if (hitDoorSlab(*d, px, py, dx, dy, out)) {
+                if (out.perpDist > maxDist) { out.hit = false; break; }
+                return out;
+            }
+            // Missed the slab: keep going, so an open door really is a hole
+            // you can see and shoot through.
+            continue;
         }
 
         if (map.isSolid(mapX, mapY)) {
@@ -103,10 +202,33 @@ RayHit castRay(const Map& map, double px, double py, double dx, double dy,
             // Where along the wall face the ray landed, for texturing.
             out.wallX = sideY ? px + out.perpDist * dx : py + out.perpDist * dy;
             out.wallX -= std::floor(out.wallX);
+
+            // A wall reached by passing through a door cell is the reveal
+            // inside the doorway, so it wears the jamb texture. Without
+            // this the recess reads as ordinary brickwork and the door
+            // stops looking inset at all.
+            out.isJamb = cameFromDoor;
+            out.tex = out.isJamb ? static_cast<uint8_t>(TexDoorFrame)
+                                 : map.at(mapX, mapY).tex;
             return out;
         }
     }
     return out;
+}
+
+// Wraps the DDA and merges in any pushwall currently in motion, keeping
+// whichever is nearer.
+RayHit castRayDynamic(const Map& map, double px, double py,
+                      double dx, double dy, double maxDist) {
+    RayHit best = castRay(map, px, py, dx, dy, maxDist);
+
+    for (const Pushwall& p : map.pushwalls()) {
+        RayHit pw;
+        if (!hitPushwallBox(p, px, py, dx, dy, pw)) continue;
+        if (pw.perpDist > maxDist) continue;
+        if (!best.hit || pw.perpDist < best.perpDist) best = pw;
+    }
+    return best;
 }
 
 void Raycaster::render(Framebuffer& fb, const Map& map, const Player& player,
@@ -125,7 +247,7 @@ void Raycaster::render(Framebuffer& fb, const Map& map, const Player& player,
         const double rayDirX = player.dirX() + player.planeX() * cameraX;
         const double rayDirY = player.dirY() + player.planeY() * cameraX;
 
-        const RayHit hit = castRay(map, px, py, rayDirX, rayDirY);
+        const RayHit hit = castRayDynamic(map, px, py, rayDirX, rayDirY);
         if (!hit.hit) {
             depth_[x] = 1e30;
             continue;
@@ -141,14 +263,18 @@ void Raycaster::render(Framebuffer& fb, const Map& map, const Player& player,
         const int y0 = centre - lineH / 2;
         const int y1 = y0 + lineH;
 
-        const Texture& tex = textures[map.at(hit.mapX, hit.mapY).tex];
+        const Texture& tex = textures[hit.tex];
 
         // Which texture column the ray landed on.
         int texX = static_cast<int>(hit.wallX * kTexSize);
         // Mirror on the two faces the ray meets from behind, otherwise the
         // texture reads reversed on opposite sides of the same wall and
-        // lettering or bevels point the wrong way.
-        if ((!hit.sideY && rayDirX > 0.0) || (hit.sideY && rayDirY < 0.0))
+        // lettering or bevels point the wrong way. Door panels are exempt:
+        // their texture coordinate already tracks the sliding panel, and
+        // mirroring it would make the door appear to open the wrong way
+        // depending on which side you approach from.
+        if (!hit.isDoor &&
+            ((!hit.sideY && rayDirX > 0.0) || (hit.sideY && rayDirY < 0.0)))
             texX = kTexSize - 1 - texX;
         texX = std::clamp(texX, 0, kTexSize - 1);
 

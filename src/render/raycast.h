@@ -7,6 +7,7 @@
 // whole reason the technique ran on a 386.
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "../core/config.h"
@@ -26,9 +27,20 @@ struct RayHit {
     int    mapX = 0;
     int    mapY = 0;
     bool   sideY = false;   // true if the ray crossed a horizontal edge
-    double wallX = 0.0;     // 0..1 across the face that was hit; the
-                            // texture column in phase 2
+    double wallX = 0.0;     // 0..1 across the face that was hit; picks the
+                            // texture column
     bool   hit = false;
+
+    // Set when the ray stopped on a door slab rather than a wall face. The
+    // texture then slides with the door instead of being pinned to the cell.
+    bool   isDoor = false;
+    // Set when the wall we hit is the reveal behind a doorway, which gets
+    // the jamb texture so a recessed door reads as recessed.
+    bool   isJamb = false;
+    // Set when the ray stopped on a pushwall in motion. Those have left the
+    // tile grid, so mapX/mapY do not identify them.
+    bool   isPushwall = false;
+    uint8_t tex = 0;        // resolved texture for this hit
 };
 
 // Casts a single ray from (px, py) along (dx, dy). Exposed so game code can
@@ -36,6 +48,11 @@ struct RayHit {
 // renderer uses.
 RayHit castRay(const Map& map, double px, double py, double dx, double dy,
                double maxDist = 64.0);
+
+// castRay plus any pushwall currently sliding. Use this for anything that
+// must respect a secret in motion — rendering, line of sight, hitscans.
+RayHit castRayDynamic(const Map& map, double px, double py,
+                      double dx, double dy, double maxDist = 64.0);
 
 class Raycaster {
 public:
