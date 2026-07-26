@@ -6,6 +6,7 @@
 #include "../platform/win32_app.h"
 #include <vector>
 
+#include "../render/actor_sprites.h"
 #include "../render/raycast.h"
 #include "../render/sprite_set.h"
 #include "../render/sprites.h"
@@ -54,17 +55,20 @@ private:
     double    time_  = 0.0;   // seconds of simulated time
     bool      quit_  = false;
     bool      show_minimap_ = false;
-    // 0 off, 1 wall textures, 2 object sprites. Cycled by T; both sets are
-    // too tall to show at once at 320x200.
+    // Debug atlas page, cycled by T: 0 off, 1 wall textures, 2 objects,
+    // 3 guard facings, 4 guard walk and fire, 5 guard death and SS. Paged
+    // because twelve 64x64 frames is all that fits at 320x200.
     int       atlas_mode_   = 0;
+    static constexpr int kAtlasModes = 6;
     UseResult use_result_   = UseResult::Nothing;
 
     Map        map_;
     Player     player_;
     Items      items_;
     Raycaster  caster_;
-    TextureSet textures_;
-    SpriteSet  sprites_;
+    TextureSet   textures_;
+    SpriteSet    sprites_;
+    ActorSprites actors_;
 
     // Rebuilt every frame from whatever is currently in the world. Kept as
     // a member so the per-frame sort reuses this allocation instead of

@@ -30,6 +30,7 @@ constexpr uint32_t kMiniRay    = rgb(0xf0, 0x40, 0x40);
 void Game::init() {
     textures_.generate();
     sprites_.generate();
+    actors_.generate();
     map_   = Map::level1();
     state_ = GameState::Title;
     time_  = 0.0;
@@ -75,7 +76,8 @@ void Game::updateTitle(const Platform& in) {
 
 void Game::updatePlaying(const Platform& in) {
     if (in.pressed(Key::Minimap))  show_minimap_ = !show_minimap_;
-    if (in.pressed(Key::TexAtlas)) atlas_mode_ = (atlas_mode_ + 1) % 3;
+    if (in.pressed(Key::TexAtlas))
+        atlas_mode_ = (atlas_mode_ + 1) % kAtlasModes;
 
     player_.update(in, map_, items_, kTickDT);
     items_.collect(player_);
@@ -117,31 +119,87 @@ void Game::render(Framebuffer& fb) {
     if (atlas_mode_)   renderTexAtlas(fb);
 }
 
+namespace {
+
+constexpr int kAtlasCols = 4;
+constexpr int kAtlasPad  = 2;
+
+int atlasOriginX() {
+    return (kScreenW - (kAtlasCols * (kTexSize + kAtlasPad) - kAtlasPad)) / 2;
+}
+
+// Sprites are mostly empty, so a flat backdrop is drawn behind them —
+// against the 3D view there is no telling a transparent pixel from a dark
+// one, which is exactly the confusion the atlas exists to remove.
+void blitSpriteCell(Framebuffer& fb, const Sprite& s, int ox, int oy) {
+    for (int y = 0; y < kTexSize; ++y) {
+        for (int x = 0; x < kTexSize; ++x) {
+            const uint32_t c = s.at(x, y);
+            fb.put(ox + x, oy + y,
+                   isTransparent(c) ? rgb(0x30, 0x30, 0x38) : c);
+        }
+    }
+}
+
+} // namespace
+
 void Game::renderTexAtlas(Framebuffer& fb) const {
-    constexpr int kCols = 4;
-    constexpr int kPad  = 2;
-    const int count = (atlas_mode_ == 1) ? static_cast<int>(TexCount)
-                                         : static_cast<int>(SprCount);
-    const int originX = (kScreenW - (kCols * (kTexSize + kPad) - kPad)) / 2;
+    const int originX = atlasOriginX();
     const int originY = 4;
 
-    for (int i = 0; i < count; ++i) {
-        const int ox = originX + (i % kCols) * (kTexSize + kPad);
-        const int oy = originY + (i / kCols) * (kTexSize + kPad);
-        for (int y = 0; y < kTexSize; ++y) {
-            for (int x = 0; x < kTexSize; ++x) {
-                if (atlas_mode_ == 1) {
+    if (atlas_mode_ == 1) {
+        for (int i = 0; i < static_cast<int>(TexCount); ++i) {
+            const int ox = originX + (i % kAtlasCols) * (kTexSize + kAtlasPad);
+            const int oy = originY + (i / kAtlasCols) * (kTexSize + kAtlasPad);
+            for (int y = 0; y < kTexSize; ++y)
+                for (int x = 0; x < kTexSize; ++x)
                     fb.put(ox + x, oy + y, textures_[i].at(x, y));
-                } else {
-                    // Sprites are mostly empty, so they get a flat backdrop
-                    // — against the 3D view you cannot tell a transparent
-                    // pixel from a dark one.
-                    const uint32_t c = sprites_[i].at(x, y);
-                    fb.put(ox + x, oy + y,
-                           isTransparent(c) ? rgb(0x30, 0x30, 0x38) : c);
-                }
-            }
         }
+        return;
+    }
+
+    // Assemble the page as a list of frames, so each mode is a description
+    // of what to show rather than its own nested loop.
+    std::vector<const Sprite*> page;
+    const auto guard = EnemyType::Guard;
+
+    switch (atlas_mode_) {
+    case 2:
+        for (int i = 0; i < static_cast<int>(SprCount); ++i)
+            page.push_back(&sprites_[i]);
+        break;
+
+    case 3:   // all eight facings, which is the gameplay-relevant set
+        for (int a = 0; a < ActorSprites::kAngles; ++a)
+            page.push_back(&actors_.frame(guard, ActorPose::Stand, a, 0));
+        break;
+
+    case 4:   // walk cycle face-on, walk cycle in profile, then firing
+        for (int f = 0; f < ActorSprites::kWalkFrames; ++f)
+            page.push_back(&actors_.frame(guard, ActorPose::Walk, 0, f));
+        for (int f = 0; f < ActorSprites::kWalkFrames; ++f)
+            page.push_back(&actors_.frame(guard, ActorPose::Walk, 2, f));
+        for (int f = 0; f < ActorSprites::kShootFrames; ++f)
+            page.push_back(&actors_.frame(guard, ActorPose::Shoot, 0, f));
+        break;
+
+    case 5:   // pain, the death sequence, then the SS for comparison
+        page.push_back(&actors_.frame(guard, ActorPose::Pain, 0, 0));
+        for (int f = 0; f < ActorSprites::kDieFrames; ++f)
+            page.push_back(&actors_.frame(guard, ActorPose::Die, 0, f));
+        for (int a = 0; a < ActorSprites::kAngles; a += 2)
+            page.push_back(&actors_.frame(EnemyType::SS, ActorPose::Stand, a, 0));
+        page.push_back(&actors_.frame(EnemyType::SS, ActorPose::Shoot, 0, 1));
+        break;
+
+    default:
+        return;
+    }
+
+    for (size_t i = 0; i < page.size(); ++i) {
+        const int ox = originX + static_cast<int>(i % kAtlasCols) * (kTexSize + kAtlasPad);
+        const int oy = originY + static_cast<int>(i / kAtlasCols) * (kTexSize + kAtlasPad);
+        blitSpriteCell(fb, *page[i], ox, oy);
     }
 }
 
