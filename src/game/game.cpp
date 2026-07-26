@@ -69,8 +69,25 @@ void Game::updateTitle(const Platform& in) {
 void Game::updatePlaying(const Platform& in) {
     if (in.pressed(Key::Minimap))  show_minimap_ = !show_minimap_;
     if (in.pressed(Key::TexAtlas)) show_atlas_   = !show_atlas_;
+
     player_.update(in, map_, kTickDT);
-    // Doors, enemy AI and projectiles hang off here.
+
+    if (in.pressed(Key::Use)) {
+        const UseResult r = map_.use(player_.x(), player_.y(),
+                                     player_.dirX(), player_.dirY(),
+                                     player_.hasGoldKey(),
+                                     player_.hasSilverKey());
+        if (r == UseResult::ExitReached) state_ = GameState::LevelDone;
+        // A locked door is worth telling the player about; the HUD message
+        // that says so arrives with the status bar in phase 7.
+        use_result_ = r;
+    }
+
+    // Animated after the player has moved, so a door never closes into the
+    // cell they just stepped into.
+    map_.update(kTickDT, player_.x(), player_.y());
+
+    // Enemy AI and projectiles hang off here.
 }
 
 void Game::render(Framebuffer& fb) {

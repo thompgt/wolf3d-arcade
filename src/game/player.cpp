@@ -84,9 +84,13 @@ bool Player::collides(const Map& map, double x, double y) const {
 
     for (int ty = y0; ty <= y1; ++ty)
         for (int tx = x0; tx <= x1; ++tx)
-            if (map.isSolid(tx, ty)) return true;
+            // blocksMovement rather than isSolid: an open door is a tile you
+            // can walk through even though it is still a door.
+            if (map.blocksMovement(tx, ty)) return true;
 
-    return false;
+    // A pushwall in motion is off the grid, so it needs its own test — and
+    // it must push the player rather than swallow them.
+    return map.hitsPushwall(x, y, r);
 }
 
 } // namespace wolf

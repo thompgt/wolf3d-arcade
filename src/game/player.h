@@ -40,6 +40,11 @@ public:
 
     const PlayerTuning& tuning() const { return tuning_; }
 
+    bool hasGoldKey()   const { return gold_key_; }
+    bool hasSilverKey() const { return silver_key_; }
+    void giveGoldKey()   { gold_key_ = true; }
+    void giveSilverKey() { silver_key_ = true; }
+
 private:
     void setAngle(double a);
 
@@ -57,6 +62,9 @@ private:
     double angle_ = 0.0;
     double dir_x_ = 1.0, dir_y_ = 0.0;
     double plane_x_ = 0.0, plane_y_ = 0.66;
+
+    bool gold_key_   = false;
+    bool silver_key_ = false;
 
     PlayerTuning tuning_;
 };

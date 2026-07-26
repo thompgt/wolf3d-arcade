@@ -50,6 +50,7 @@ private:
     bool      quit_  = false;
     bool      show_minimap_ = false;
     bool      show_atlas_   = false;
+    UseResult use_result_   = UseResult::Nothing;
 
     Map        map_;
     Player     player_;
