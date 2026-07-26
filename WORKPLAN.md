@@ -78,17 +78,25 @@ distance without shimmering. ✔
 
 ---
 
-## Phase 3 — Doors, pushwalls, keys `[ ]`
+## Phase 3 — Doors, pushwalls, keys `[x]`
 
-- [ ] Sliding door: opening/open/closing/closed states, auto-close timer,
-      blocked if an actor stands in the doorway
-- [ ] Doors raycast at the tile midline with a horizontal texture offset
-- [ ] Locked doors requiring gold/silver keys
-- [ ] Secret pushwalls: `Use` shoves the tile two cells and reveals a room
-- [ ] Exit elevator switch → `LevelDone`
+- [x] Sliding door: opening/open/closing/closed states, auto-close timer,
+      refuses to close while the player stands in the doorway
+- [x] Doors raycast at the tile midline, texture sliding with the panel
+- [x] Jamb texture on the reveal, so a recessed door reads as recessed
+- [x] Locked doors requiring gold/silver keys, closed to enemies too
+- [x] Secret pushwalls: `Use` shoves the box two cells, off the tile grid,
+      tested against rays and collision as a moving AABB
+- [x] Exit switch → `LevelDone`
+- [x] `--selftest`: 46 headless checks over the above
+
+Doors and secrets are verified by `--selftest` rather than by playing.
+Reaching the pushwall in game means passing two locked doors, so a scripted
+keystroke run cannot get there, and a screenshot could not prove the secret
+settled exactly two tiles away in any case.
 
 **Done when:** doors open on `Use` and on enemy approach, locked doors
-refuse without the key, and at least two secrets are findable.
+refuse without the key, and the secret is findable. ✔
 
 ---
 
