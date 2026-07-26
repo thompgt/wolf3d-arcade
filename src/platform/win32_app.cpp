@@ -14,6 +14,13 @@ bool g_quit = false;
 // its own window.
 bool g_vk[256] = {};
 
+// Sticky "was pressed at least once since the last pump()" flags. Without
+// these, a tap that both starts and ends inside a single frame is invisible:
+// the message loop processes keydown then keyup, leaving g_vk false by the
+// time the game samples it, and the input is silently dropped. Latching the
+// press guarantees every keystroke is seen for exactly one frame.
+bool g_vk_hit[256] = {};
+
 // Accumulated mouse motion, drained once per pump().
 int  g_mouse_accum = 0;
 bool g_mouse_captured = false;
@@ -27,7 +34,10 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
-        if (wp < 256) g_vk[wp] = true;
+        if (wp < 256) {
+            g_vk[wp] = true;
+            g_vk_hit[wp] = true;
+        }
         // Swallow Alt so tapping it doesn't drop us into the window menu.
         if (msg == WM_SYSKEYDOWN) return 0;
         return 0;
@@ -41,6 +51,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // Drop every held key: without this, alt-tabbing away mid-strafe
         // leaves the player sliding into a wall forever.
         for (bool& k : g_vk) k = false;
+        for (bool& k : g_vk_hit) k = false;
         return 0;
 
     case WM_INPUT: {
@@ -129,8 +140,6 @@ void Platform::shutdown() {
 }
 
 bool Platform::pump() {
-    for (int i = 0; i < static_cast<int>(Key::Count); ++i) prev_[i] = down_[i];
-
     mouse_dx_ = 0;
     g_mouse_accum = 0;
 
@@ -141,27 +150,51 @@ bool Platform::pump() {
     }
     mouse_dx_ = g_mouse_accum;
 
-    auto set = [this](Key k, bool v) { down_[static_cast<int>(k)] = v; };
-    set(Key::Forward,     g_vk['W'] || g_vk[VK_UP]);
-    set(Key::Back,        g_vk['S'] || g_vk[VK_DOWN]);
-    set(Key::StrafeLeft,  g_vk['A']);
-    set(Key::StrafeRight, g_vk['D']);
-    set(Key::TurnLeft,    g_vk[VK_LEFT]);
-    set(Key::TurnRight,   g_vk[VK_RIGHT]);
-    set(Key::Fire,        g_vk[VK_CONTROL] || g_vk[VK_SPACE] || g_vk[VK_LBUTTON]);
-    set(Key::Use,         g_vk['E']);
-    set(Key::Run,         g_vk[VK_SHIFT]);
-    set(Key::Weapon1,     g_vk['1']);
-    set(Key::Weapon2,     g_vk['2']);
-    set(Key::Weapon3,     g_vk['3']);
-    set(Key::Weapon4,     g_vk['4']);
-    set(Key::Dash,        g_vk['Q']);
-    set(Key::Grenade,     g_vk['G']);
-    set(Key::Slowmo,      g_vk['F']);
-    set(Key::Start,       g_vk[VK_RETURN]);
-    set(Key::Quit,        g_vk[VK_ESCAPE]);
+    // A key counts as down if it is still held, or if it was tapped at any
+    // point since the last pump. vk() folds those two together so a fast
+    // tap survives for exactly one frame and still produces a pressed() edge.
+    auto vk = [](int code) { return g_vk[code] || g_vk_hit[code]; };
+
+    bool now[static_cast<int>(Key::Count)] = {};
+    auto set = [&now](Key k, bool v) { now[static_cast<int>(k)] = v; };
+    set(Key::Forward,     vk('W') || vk(VK_UP));
+    set(Key::Back,        vk('S') || vk(VK_DOWN));
+    set(Key::StrafeLeft,  vk('A'));
+    set(Key::StrafeRight, vk('D'));
+    set(Key::TurnLeft,    vk(VK_LEFT));
+    set(Key::TurnRight,   vk(VK_RIGHT));
+    set(Key::Fire,        vk(VK_CONTROL) || vk(VK_SPACE) || vk(VK_LBUTTON));
+    set(Key::Use,         vk('E'));
+    set(Key::Run,         vk(VK_SHIFT));
+    set(Key::Weapon1,     vk('1'));
+    set(Key::Weapon2,     vk('2'));
+    set(Key::Weapon3,     vk('3'));
+    set(Key::Weapon4,     vk('4'));
+    set(Key::Dash,        vk('Q'));
+    set(Key::Grenade,     vk('G'));
+    set(Key::Slowmo,      vk('F'));
+    set(Key::Start,       vk(VK_RETURN));
+    set(Key::Quit,        vk(VK_ESCAPE));
+    set(Key::Minimap,     vk('M'));
+    set(Key::Screenshot,  vk(VK_F12));
+
+    // Latch a rising edge for anything newly pressed. edge_ is only cleared
+    // by consumeEdges(), so a press made between two ticks survives until a
+    // tick actually runs.
+    for (int i = 0; i < static_cast<int>(Key::Count); ++i) {
+        if (now[i] && !last_[i]) edge_[i] = true;
+        last_[i] = now[i];
+        down_[i] = now[i];
+    }
+
+    // Consumed for this frame; a still-held key stays true via g_vk.
+    for (bool& k : g_vk_hit) k = false;
 
     return !g_quit;
+}
+
+void Platform::consumeEdges() {
+    for (bool& e : edge_) e = false;
 }
 
 void Platform::present(const Framebuffer& fb) {

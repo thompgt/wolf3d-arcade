@@ -18,6 +18,8 @@ enum class Key {
     Weapon1, Weapon2, Weapon3, Weapon4,
     Dash, Grenade, Slowmo,
     Start, Quit,
+    Minimap,     // debug: top-down view of the level
+    Screenshot,  // debug: dump the framebuffer to shot.bmp
     Count
 };
 
@@ -33,13 +35,23 @@ public:
     // Scales the framebuffer up and blits it to the client area.
     void present(const Framebuffer& fb);
 
-    // Held this frame.
+    // Held right now.
     bool down(Key k) const { return down_[static_cast<int>(k)]; }
-    // Held this frame but not the previous one: for one-shot actions.
-    bool pressed(Key k) const {
-        const int i = static_cast<int>(k);
-        return down_[i] && !prev_[i];
-    }
+
+    // A fresh press that no game tick has acted on yet.
+    //
+    // This is deliberately *sticky* rather than a plain "down and not down
+    // last frame". Frames and ticks run at different rates: at 200fps
+    // against a 60Hz tick, most frames run no tick at all, and an edge
+    // recomputed every pump() would be created and destroyed between ticks
+    // without update() ever seeing it. Latching the press until a tick
+    // consumes it is what makes every keystroke count.
+    bool pressed(Key k) const { return edge_[static_cast<int>(k)]; }
+
+    // Clears the latched presses. Called by the loop after each tick, so one
+    // keystroke produces exactly one pressed() — never zero (dropped between
+    // ticks) and never two (a catch-up frame running several ticks).
+    void consumeEdges();
 
     // Horizontal mouse delta in pixels since the last pump(), for mouselook.
     int mouseDX() const { return mouse_dx_; }
@@ -49,8 +61,9 @@ public:
 
 private:
     void* hwnd_ = nullptr;   // HWND, kept opaque to avoid leaking windows.h
-    bool  down_[static_cast<int>(Key::Count)] = {};
-    bool  prev_[static_cast<int>(Key::Count)] = {};
+    bool  down_[static_cast<int>(Key::Count)] = {};  // held now
+    bool  edge_[static_cast<int>(Key::Count)] = {};  // press awaiting a tick
+    bool  last_[static_cast<int>(Key::Count)] = {};  // previous pump's down_
     int   mouse_dx_ = 0;
 };
 
