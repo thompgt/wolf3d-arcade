@@ -1,0 +1,18 @@
+build/
+*.o
+*.d
+*.exe
+*.obj
+*.pdb
+*.ilk
+
+# Editors / tooling
+.vscode/
+.vs/
+.idea/
+*.swp
+compile_commands.json
+
+# Windows cruft
+Thumbs.db
+desktop.ini

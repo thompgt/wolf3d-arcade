@@ -1,0 +1,88 @@
+# Wolf3D Arcade
+
+A from-scratch Wolfenstein 3D-style first-person shooter in C++ — software
+raycaster, no engine, no game libraries, and **no asset files**. Every
+texture and sprite is generated procedurally in code at startup.
+
+The only dependency is Win32 itself: the renderer draws into a 320x200
+32-bit buffer and blits it to the window with `StretchDIBits`, which is
+about as close as you can get today to how the original worked.
+
+> Status: **Phase 0 complete** — window, frame loop and state machine are
+> up. See [WORKPLAN.md](WORKPLAN.md) for what lands next.
+
+## Build
+
+Requires a MinGW-w64 g++ (MSYS2 UCRT64 works; that's what this is developed
+against). Nothing else to install.
+
+```bat
+build.bat          :: release build -> build\wolf3d.exe
+build.bat debug    :: -O0 -g, console attached
+build.bat run      :: build, then launch
+```
+
+Or with make:
+
+```sh
+mingw32-make        # release
+mingw32-make debug  # debug
+mingw32-make run
+mingw32-make clean
+```
+
+The link line uses `-static -static-libgcc -static-libstdc++` deliberately.
+A dynamically linked MinGW binary gets flagged by Windows Defender
+heuristics on some machines and silently fails to launch; static linking
+sidesteps it and makes `wolf3d.exe` portable on its own.
+
+## Controls
+
+| Key | Action |
+| --- | --- |
+| `W` `A` `S` `D` | Move / strafe |
+| `←` `→` or mouse | Turn |
+| `Ctrl` / `Space` / LMB | Fire |
+| `E` | Open door, use switch, push secret wall |
+| `1`–`4` | Knife / Pistol / Machine gun / Chaingun |
+| `Shift` | Sprint |
+| `Q` | Dash |
+| `G` | Grenade |
+| `F` | Slow-mo |
+| `Enter` | Start |
+| `Esc` | Back / quit |
+
+Later-phase controls are already bound; they do nothing until their phase
+lands.
+
+## Layout
+
+```
+src/
+  main.cpp              frame loop, fixed 60Hz timestep
+  core/
+    config.h            resolution, tick rate, FOV, texture size
+    framebuffer.h|cpp   the pixel buffer and its primitives
+  platform/
+    win32_app.h|cpp     window, input, timing, blit (only Win32-aware code)
+  render/               raycaster, textures, sprites, HUD
+  game/
+    game.h|cpp          state machine, world tick
+                        map, player, enemies, weapons
+```
+
+The split is deliberate: `render/` never makes game decisions, `game/` never
+writes pixels, and `platform/` is the only thing that includes `windows.h`.
+
+## Assets
+
+There are none, and that's the point. Wolfenstein 3D's art is copyrighted
+and isn't distributable, so every wall texture, enemy frame, weapon sprite
+and HUD glyph in this repo is drawn by code — value-noise brickwork,
+parametric guard poses, a generated 8x8 bitmap font. It keeps the repo
+self-contained and the look consistent.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). Not affiliated with or endorsed by id
+Software; this is an original implementation inspired by their design.
