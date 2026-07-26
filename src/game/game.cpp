@@ -14,6 +14,10 @@ constexpr uint32_t kBarEdge  = rgb(0x00, 0x2c, 0x00);
 constexpr uint32_t kTitleBg  = rgb(0x18, 0x10, 0x10);
 constexpr uint32_t kTitleFg  = rgb(0xd8, 0xa8, 0x28);
 
+// Weapon sway frequency, radians per second. Tuned against the walk speed
+// so one sway matches roughly one stride.
+constexpr double kBobRate = 7.5;
+
 // Minimap: pixels per tile, and where it sits on screen.
 constexpr int kMiniScale = 3;
 constexpr int kMiniX     = 4;
@@ -39,6 +43,7 @@ void Game::init() {
     textures_.generate();
     sprites_.generate();
     actors_.generate();
+    weapon_art_.generate();
     map_   = Map::level1();
     state_ = GameState::Title;
     time_  = 0.0;
@@ -52,6 +57,8 @@ void Game::startLevel() {
     items_.spawnFrom(map_);
     enemies_.spawnFrom(map_);
     player_ = Player();
+    weapons_.reset();
+    bob_ = 0.0;
     // Face east into the cell block corridor rather than at the wall behind
     // the spawn point.
     player_.spawn(map_.startX(), map_.startY(), 0.0);
@@ -89,7 +96,20 @@ void Game::updatePlaying(const Platform& in) {
         atlas_mode_ = (atlas_mode_ + 1) % kAtlasModes;
 
     player_.update(in, map_, items_, enemies_, kTickDT);
+
+    // Ownership before the sweep, so a weapon picked up this tick can be put
+    // in the player's hands rather than waiting for them to press a number.
+    const bool hadMachineGun = player_.hasMachineGun();
+    const bool hadChaingun   = player_.hasChaingun();
     items_.collect(player_);
+    if (!hadChaingun && player_.hasChaingun())
+        weapons_.select(WeaponType::Chaingun, player_);
+    else if (!hadMachineGun && player_.hasMachineGun())
+        weapons_.select(WeaponType::MachineGun, player_);
+
+    // The walk cycle only advances while walking; a weapon that swayed on
+    // after the player stopped would look like it was floating.
+    if (player_.isMoving()) bob_ += kBobRate * kTickDT;
 
     if (in.pressed(Key::Use)) {
         const UseResult r = map_.use(player_.x(), player_.y(),
@@ -106,12 +126,33 @@ void Game::updatePlaying(const Platform& in) {
     // cell they just stepped into.
     map_.update(kTickDT, player_.x(), player_.y());
 
+    // Weapons before the enemies, so a guard killed this tick does not also
+    // get to take his shot.
+    updateWeapons(in);
+
     enemies_.update(kTickDT, map_, player_, items_);
 
     if (player_.isDead()) {
         state_ = GameState::Dead;
         time_  = 0.0;
     }
+}
+
+void Game::updateWeapons(const Platform& in) {
+    // Selection is a table lookup rather than four branches, so adding a
+    // fifth weapon is a row here and a row in the tuning table.
+    static const struct { Key key; WeaponType weapon; } kBindings[] = {
+        {Key::Weapon1, WeaponType::Knife},
+        {Key::Weapon2, WeaponType::Pistol},
+        {Key::Weapon3, WeaponType::MachineGun},
+        {Key::Weapon4, WeaponType::Chaingun},
+    };
+    for (const auto& b : kBindings)
+        if (in.pressed(b.key)) weapons_.select(b.weapon, player_);
+
+    // down(), not pressed(): the automatic weapons need the held state, and
+    // Weapons itself works out the edge for the ones that fire on a press.
+    weapons_.update(kTickDT, in.down(Key::Fire), map_, player_, enemies_);
 }
 
 void Game::render(Framebuffer& fb) {
@@ -128,6 +169,13 @@ void Game::render(Framebuffer& fb) {
     items_.appendBillboards(billboards_, sprites_);
     enemies_.appendBillboards(billboards_, player_, actors_);
     renderBillboards(fb, player_, caster_.depth(), billboards_);
+
+    // The flash lights the world, so it goes on before the weapon is drawn —
+    // washing the gun itself would just make it disappear at the moment the
+    // player is looking hardest at it.
+    applyMuzzleFlash(fb, weapons_.flash());
+    renderWeapon(fb, weapon_art_.frame(weapons_.current(), weapons_.frame()),
+                 bob_);
 
     renderStatusBar(fb);
     if (show_minimap_) renderMinimap(fb);
@@ -206,6 +254,19 @@ void Game::renderTexAtlas(Framebuffer& fb) const {
             page.push_back(&actors_.frame(EnemyType::SS, ActorPose::Stand, a, 0));
         page.push_back(&actors_.frame(EnemyType::SS, ActorPose::Shoot, 0, 1));
         break;
+
+    // The weapons, two per page. All four at once would be sixteen cells,
+    // and only three rows of four fit in 200 rows — the fourth weapon would
+    // be silently off the bottom of the screen, which is exactly the kind of
+    // thing a debug view exists to not do.
+    case 6:
+    case 7: {
+        const int first = (atlas_mode_ == 6) ? 0 : 2;
+        for (int w = first; w < first + 2; ++w)
+            for (int f = 0; f < WeaponSprites::kFrames; ++f)
+                page.push_back(&weapon_art_.frame(static_cast<WeaponType>(w), f));
+        break;
+    }
 
     default:
         return;

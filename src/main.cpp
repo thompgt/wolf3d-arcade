@@ -12,6 +12,7 @@
 #include "selftest.h"
 
 #include <cstring>
+#include <memory>
 
 using namespace wolf;
 
@@ -24,8 +25,15 @@ int main(int argc, char** argv) {
     if (!platform.init("Wolf3D Arcade")) return 1;
 
     Framebuffer fb(kScreenW, kScreenH);
-    Game game;
-    game.init();
+
+    // On the heap, and it has to be. Game holds every generated sprite by
+    // value -- the actor set alone is 98 frames of 64x64x4 -- which puts it
+    // over two megabytes. As a local it does not merely risk overflowing the
+    // stack: the compiler reserves the whole frame in main's prologue, so
+    // main blows the stack on entry and never reaches a line of this
+    // function, including the --selftest branch above.
+    auto game = std::make_unique<Game>();
+    game->init();
 
     double previous    = platform.now();
     double accumulator = 0.0;
@@ -44,16 +52,16 @@ int main(int argc, char** argv) {
         const bool wantShot = platform.pressed(Key::Screenshot);
 
         while (accumulator >= kTickDT) {
-            game.update(platform);
+            game->update(platform);
             // One keystroke must produce one pressed() edge, even when this
             // loop catches up on several ticks at once.
             platform.consumeEdges();
             accumulator -= kTickDT;
         }
 
-        if (game.wantsQuit()) break;
+        if (game->wantsQuit()) break;
 
-        game.render(fb);
+        game->render(fb);
 
         // Dumped after render, before present, so it is exactly the frame
         // the player is about to see.
