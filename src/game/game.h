@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../render/actor_sprites.h"
+#include "../render/hud.h"
 #include "../render/raycast.h"
 #include "../render/sprite_set.h"
 #include "../render/sprites.h"
@@ -50,8 +51,11 @@ private:
     // it buries the rest of the update.
     void updateWeapons(const Platform& in);
 
-    void renderTitle(Framebuffer& fb) const;
-    void renderStatusBar(Framebuffer& fb) const;
+    // Packs the world's numbers into the plain struct the HUD draws from.
+    // The face's idle glance and its reaction timers are decided here, on
+    // the sim clock, rather than in render/ where they would run at whatever
+    // rate the machine happens to draw.
+    HudState hudState() const;
     // Debug aid: top-down view of the level with the player's facing.
     void renderMinimap(Framebuffer& fb) const;
     // Debug aid: the generated textures laid out flat, which is the only
@@ -80,6 +84,19 @@ private:
     SpriteSet     sprites_;
     ActorSprites  actors_;
     WeaponSprites weapon_art_;
+    FaceSprites   faces_;
+
+    // Reaction timers, in seconds remaining. The face and the screen washes
+    // both outlive the single tick that caused them, which is the only way
+    // either is visible at 60Hz.
+    double hurt_timer_   = 0.0;
+    double gloat_timer_  = 0.0;
+    double damage_flash_ = 0.0;
+    double pickup_flash_ = 0.0;
+
+    // Time spent in Dead or LevelDone, so those screens can animate without
+    // disturbing the playing clock.
+    double screen_time_ = 0.0;
 
     // Walk-cycle phase, in radians. Advanced only while the player is
     // actually moving, so the weapon settles when they stop instead of

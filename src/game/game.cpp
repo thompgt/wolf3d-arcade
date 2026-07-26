@@ -1,5 +1,6 @@
 #include "game.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "../core/config.h"
@@ -7,12 +8,13 @@
 namespace wolf {
 namespace {
 
-// Placeholder palette. The real one is generated alongside the procedural
-// textures in a later phase.
-constexpr uint32_t kBarFace  = rgb(0x00, 0x54, 0x00);
-constexpr uint32_t kBarEdge  = rgb(0x00, 0x2c, 0x00);
-constexpr uint32_t kTitleBg  = rgb(0x18, 0x10, 0x10);
-constexpr uint32_t kTitleFg  = rgb(0xd8, 0xa8, 0x28);
+// How long the face reacts for, and how long a screen wash lasts. All four
+// are well above a single tick: at 60Hz anything that lasts one frame is
+// gone before the player's eye has resolved it.
+constexpr double kHurtTime     = 0.60;
+constexpr double kGloatTime    = 0.90;
+constexpr double kDamageFlash  = 0.35;
+constexpr double kPickupFlash  = 0.22;
 
 // Weapon sway frequency, radians per second. Tuned against the walk speed
 // so one sway matches roughly one stride.
@@ -44,6 +46,7 @@ void Game::init() {
     sprites_.generate();
     actors_.generate();
     weapon_art_.generate();
+    faces_.generate();
     map_   = Map::level1();
     state_ = GameState::Title;
     time_  = 0.0;
@@ -59,6 +62,9 @@ void Game::startLevel() {
     player_ = Player();
     weapons_.reset();
     bob_ = 0.0;
+    hurt_timer_ = gloat_timer_ = 0.0;
+    damage_flash_ = pickup_flash_ = 0.0;
+    screen_time_ = 0.0;
     // Face east into the cell block corridor rather than at the wall behind
     // the spawn point.
     player_.spawn(map_.startX(), map_.startY(), 0.0);
@@ -81,7 +87,11 @@ void Game::update(const Platform& in) {
     case GameState::Playing:   updatePlaying(in); break;
     case GameState::Dead:
     case GameState::LevelDone:
-        if (in.pressed(Key::Start)) state_ = GameState::Title;
+        screen_time_ += kTickDT;
+        // Held off briefly so the tally has time to land and a death is not
+        // skipped by the same trigger pull that caused it.
+        if (screen_time_ > 1.0 && in.pressed(Key::Start))
+            state_ = GameState::Title;
         break;
     }
 }
@@ -101,7 +111,9 @@ void Game::updatePlaying(const Platform& in) {
     // in the player's hands rather than waiting for them to press a number.
     const bool hadMachineGun = player_.hasMachineGun();
     const bool hadChaingun   = player_.hasChaingun();
+    const int  itemsBefore   = items_.remaining();
     items_.collect(player_);
+    if (items_.remaining() < itemsBefore) pickup_flash_ = kPickupFlash;
     if (!hadChaingun && player_.hasChaingun())
         weapons_.select(WeaponType::Chaingun, player_);
     else if (!hadMachineGun && player_.hasMachineGun())
@@ -116,9 +128,10 @@ void Game::updatePlaying(const Platform& in) {
                                      player_.dirX(), player_.dirY(),
                                      player_.hasGoldKey(),
                                      player_.hasSilverKey());
-        if (r == UseResult::ExitReached) state_ = GameState::LevelDone;
-        // A locked door is worth telling the player about; the HUD message
-        // that says so arrives with the status bar in phase 7.
+        if (r == UseResult::ExitReached) {
+            state_ = GameState::LevelDone;
+            screen_time_ = 0.0;
+        }
         use_result_ = r;
     }
 
@@ -128,13 +141,29 @@ void Game::updatePlaying(const Platform& in) {
 
     // Weapons before the enemies, so a guard killed this tick does not also
     // get to take his shot.
+    const int killsBefore = enemies_.killed();
     updateWeapons(in);
+    if (enemies_.killed() > killsBefore) gloat_timer_ = kGloatTime;
 
+    // Health sampled across the enemy tick, which is the only thing that can
+    // take it away. Comparing is simpler than routing a callback out of the
+    // AI for the one fact the HUD needs.
+    const int healthBefore = player_.health();
     enemies_.update(kTickDT, map_, player_, items_);
+    if (player_.health() < healthBefore) {
+        hurt_timer_   = kHurtTime;
+        damage_flash_ = kDamageFlash;
+    }
+
+    // Reaction timers run down on the sim clock, not the frame clock.
+    hurt_timer_   = std::max(hurt_timer_   - kTickDT, 0.0);
+    gloat_timer_  = std::max(gloat_timer_  - kTickDT, 0.0);
+    damage_flash_ = std::max(damage_flash_ - kTickDT, 0.0);
+    pickup_flash_ = std::max(pickup_flash_ - kTickDT, 0.0);
 
     if (player_.isDead()) {
         state_ = GameState::Dead;
-        time_  = 0.0;
+        screen_time_ = 0.0;
     }
 }
 
@@ -150,14 +179,50 @@ void Game::updateWeapons(const Platform& in) {
     for (const auto& b : kBindings)
         if (in.pressed(b.key)) weapons_.select(b.weapon, player_);
 
-    // down(), not pressed(): the automatic weapons need the held state, and
-    // Weapons itself works out the edge for the ones that fire on a press.
-    weapons_.update(kTickDT, in.down(Key::Fire), map_, player_, enemies_);
+    // Both: the automatic weapons run on the held state, and the pistol runs
+    // on the latched edge so a tap between two ticks is not dropped.
+    weapons_.update(kTickDT, in.down(Key::Fire), in.pressed(Key::Fire),
+                    map_, player_, enemies_);
+}
+
+HudState Game::hudState() const {
+    HudState h;
+    h.floor     = 1;
+    h.score     = player_.score();
+    h.lives     = player_.lives();
+    h.health    = player_.health();
+    h.ammo      = player_.ammo();
+    h.goldKey   = player_.hasGoldKey();
+    h.silverKey = player_.hasSilverKey();
+    h.weapon    = weapons_.current();
+
+    // Idle glance: left, ahead, right, ahead, on a slow cycle. Driven off
+    // the sim clock so it keeps time rather than running at frame rate.
+    static const int kGlance[4] = {1, 0, 1, 2};
+    h.faceLook = kGlance[static_cast<int>(time_ / 1.1) & 3];
+
+    h.grimace = hurt_timer_  > 0.0;
+    h.gloat   = gloat_timer_ > 0.0;
+    return h;
 }
 
 void Game::render(Framebuffer& fb) {
     if (state_ == GameState::Title) {
-        renderTitle(fb);
+        renderTitleScreen(fb, time_);
+        return;
+    }
+
+    if (state_ == GameState::LevelDone) {
+        const int kills = enemies_.total()
+                              ? enemies_.killed() * 100 / enemies_.total() : 100;
+        const int loot  = items_.treasureTotal()
+                              ? items_.treasureTaken() * 100 / items_.treasureTotal()
+                              : 100;
+        const int secret = map_.secretsTotal()
+                               ? map_.secretsFound() * 100 / map_.secretsTotal()
+                               : 100;
+        renderLevelDone(fb, screen_time_, 1, player_.score(), kills, loot,
+                        secret);
         return;
     }
 
@@ -177,9 +242,19 @@ void Game::render(Framebuffer& fb) {
     renderWeapon(fb, weapon_art_.frame(weapons_.current(), weapons_.frame()),
                  bob_);
 
-    renderStatusBar(fb);
+    // Damage and pickup washes go over the weapon: they are what the player
+    // is being told about, and a wash the gun sat on top of would be half
+    // hidden by it.
+    washRows(fb, kViewH, 0xC0, 0x00, 0x00, damage_flash_ / kDamageFlash * 0.5);
+    washRows(fb, kViewH, 0xE0, 0xD0, 0x30, pickup_flash_ / kPickupFlash * 0.35);
+
+    renderStatusBar(fb, faces_, hudState());
     if (show_minimap_) renderMinimap(fb);
     if (atlas_mode_)   renderTexAtlas(fb);
+
+    // Drawn last and over everything, because dying interrupts the frame
+    // rather than being one more thing in it.
+    if (state_ == GameState::Dead) renderDeathScreen(fb, screen_time_);
 }
 
 namespace {
@@ -277,20 +352,6 @@ void Game::renderTexAtlas(Framebuffer& fb) const {
         const int oy = originY + static_cast<int>(i / kAtlasCols) * (kTexSize + kAtlasPad);
         blitSpriteCell(fb, *page[i], ox, oy);
     }
-}
-
-void Game::renderTitle(Framebuffer& fb) const {
-    fb.clear(kTitleBg);
-    // Stand-in for the title art until the font and menu land: a pulsing
-    // band so it is obvious at a glance that the loop is running.
-    const int pulse = 4 + static_cast<int>(3.0 * (1.0 + std::sin(time_ * 3.0)));
-    fb.fillRect(40, kScreenH / 2 - pulse, kScreenW - 80, pulse * 2, kTitleFg);
-}
-
-void Game::renderStatusBar(Framebuffer& fb) const {
-    // Shell only; contents (face, health, ammo, keys) come later.
-    fb.fillRect(0, kViewH, kScreenW, kStatusBarH, kBarFace);
-    fb.fillRect(0, kViewH, kScreenW, 1, kBarEdge);
 }
 
 void Game::renderMinimap(Framebuffer& fb) const {

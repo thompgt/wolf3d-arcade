@@ -151,6 +151,13 @@ public:
     double startX() const { return start_x_; }
     double startY() const { return start_y_; }
 
+    // Secrets, for the end-of-level tally. Counted here rather than by the
+    // caller because `pushwalls_` holds only the ones currently in motion —
+    // a settled secret has left the list, so counting it from outside would
+    // report every secret as un-found the moment it finished moving.
+    int secretsTotal() const { return secrets_total_; }
+    int secretsFound() const { return secrets_found_; }
+
 private:
     // Parses the ASCII rows into cells and spawns. See map.cpp for the legend.
     void parse(const std::vector<std::string>& rows);
@@ -168,6 +175,9 @@ private:
     std::vector<Pushwall> pushwalls_;
     // Tile -> index into doors_, or -1. Keeps doorAt() O(1) in the ray loop.
     std::vector<int>      door_index_;
+
+    int secrets_total_ = 0;
+    int secrets_found_ = 0;
 
     double start_x_ = 1.5;
     double start_y_ = 1.5;

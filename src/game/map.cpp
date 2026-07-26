@@ -330,6 +330,7 @@ UseResult Map::use(double px, double py, double dirX, double dirY,
         p.dy = dy;
         p.tex = at(tx, ty).tex;
         pushwalls_.push_back(p);
+        ++secrets_found_;
 
         // It has left the grid; the tile it was standing on opens up.
         cellAt(tx, ty).kind = TileKind::Empty;
@@ -375,6 +376,7 @@ void Map::parse(const std::vector<std::string>& rows) {
                 // secret; it borrows the steel vault texture here.
                 cell.kind = TileKind::Pushwall;
                 cell.tex  = TexSteel;
+                ++secrets_total_;
             } else if (c == 'E') {
                 cell.kind = TileKind::ExitSwitch;
                 cell.tex  = TexExitSwitch;

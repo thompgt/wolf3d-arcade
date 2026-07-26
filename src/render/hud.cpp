@@ -36,6 +36,7 @@ constexpr uint32_t kFaceBg    = rgb(0x00, 0x2c, 0x00);
 constexpr uint32_t kTitleBg   = rgb(0x18, 0x10, 0x10);
 constexpr uint32_t kTitleFg   = rgb(0xd8, 0xa8, 0x28);
 constexpr uint32_t kTitleDim  = rgb(0x88, 0x64, 0x18);
+constexpr uint32_t kTitlePanel = rgb(0x2c, 0x18, 0x10);
 
 // Short enough to fit the bar's last slot. The tuning table's names are for
 // logs, not for a 46-pixel column.
@@ -215,6 +216,28 @@ void drawKeyIcon(Framebuffer& fb, int x, int y, uint32_t color, bool held) {
 
 } // namespace
 
+// The bar is 320 pixels and the font is 8 wide, so a five-letter label costs
+// 40 of them. Laying seven fields out means budgeting the width explicitly
+// rather than eyeballing offsets — the first attempt at this ran FLOOR into
+// SCORE and pushed the weapon off the right-hand edge.
+//
+// Two decisions come out of that budget. The keys get icons and no label,
+// because a gold key and a silver key need no caption and the two columns
+// that caption would cost do not exist. And the weapon's name is used as the
+// AMMO slot's label instead of taking a slot of its own: the count belongs
+// to the weapon, so naming it there is free.
+constexpr int kFloorX  = 4;
+constexpr int kScoreX  = 48;
+constexpr int kLivesX  = 132;
+constexpr int kFaceX   = 176;
+constexpr int kHealthX = 208;
+constexpr int kKeysX   = 258;
+constexpr int kAmmoX   = 272;
+
+// Five digits is the whole field. A larger score is clamped for display
+// rather than allowed to run into LIVES.
+constexpr int kMaxShownScore = 99999;
+
 void renderStatusBar(Framebuffer& fb, const FaceSprites& faces,
                      const HudState& hud) {
     const int top = kViewH;
@@ -224,42 +247,50 @@ void renderStatusBar(Framebuffer& fb, const FaceSprites& faces,
     fb.fillRect(0, top + 1, kScreenW, 1, kBarLight);
 
     const int labelY = top + 5;
+    const int valueY = labelY + 11;
     char buf[32];
 
     std::snprintf(buf, sizeof(buf), "%d", hud.floor);
-    drawSlot(fb, 6, labelY, "FLOOR", buf, kValue);
+    drawSlot(fb, kFloorX, labelY, "FLOOR", buf, kValue);
 
-    std::snprintf(buf, sizeof(buf), "%d", hud.score);
-    drawSlot(fb, 44, labelY, "SCORE", buf, kValue);
+    std::snprintf(buf, sizeof(buf), "%d", std::min(hud.score, kMaxShownScore));
+    drawSlot(fb, kScoreX, labelY, "SCORE", buf, kValue);
 
     std::snprintf(buf, sizeof(buf), "%d", hud.lives);
-    drawSlot(fb, 112, labelY, "LIVES", buf, kValue);
+    drawSlot(fb, kLivesX, labelY, "LIVES", buf, kValue);
 
     // Face, sunk into a recess so it reads as a window rather than a sticker.
-    const int faceX = 148;
     const int faceY = top + 4;
-    fb.fillRect(faceX - 2, faceY - 2, FaceSprites::kFaceW + 4,
+    fb.fillRect(kFaceX - 2, faceY - 2, FaceSprites::kFaceW + 4,
                 FaceSprites::kFaceH + 3, kBarEdge);
     blitFace(fb, faces.pick(hud.health, hud.faceLook, hud.grimace, hud.gloat),
-             faceX, faceY);
+             kFaceX, faceY);
 
-    std::snprintf(buf, sizeof(buf), "%d%%", std::max(hud.health, 0));
+    // No per-cent sign: the label already says HEALTH, and those two columns
+    // are needed by the field next door.
+    std::snprintf(buf, sizeof(buf), "%d", std::max(hud.health, 0));
     // Health goes red before it runs out, which is the one number on the bar
     // worth reading with your eyes rather than your attention.
-    drawSlot(fb, 180, labelY, "HEALTH", buf,
+    drawSlot(fb, kHealthX, labelY, "HEALTH", buf,
              hud.health <= 25 ? kValueLow : kValue);
 
-    std::snprintf(buf, sizeof(buf), "%d", hud.ammo);
-    drawSlot(fb, 232, labelY, "AMMO", buf, hud.ammo <= 5 ? kValueLow : kValue);
-
-    drawText(fb, 268, labelY, "KEYS", kLabel, 1);
-    drawKeyIcon(fb, 268, labelY + 11, kGoldKey, hud.goldKey);
-    drawKeyIcon(fb, 277, labelY + 11, kSilverKey, hud.silverKey);
+    // Keys stacked vertically in the gutter, gold above silver.
+    drawKeyIcon(fb, kKeysX, labelY + 1, kGoldKey, hud.goldKey);
+    drawKeyIcon(fb, kKeysX, labelY + 12, kSilverKey, hud.silverKey);
 
     const int wi = std::clamp(static_cast<int>(hud.weapon), 0,
                               static_cast<int>(WeaponType::Count) - 1);
-    drawText(fb, 288, labelY, "GUN", kLabel, 1);
-    drawText(fb, 288, labelY + 13, kWeaponLabel[wi], kValue, 1);
+    drawText(fb, kAmmoX, labelY, kWeaponLabel[wi], kLabel, 1);
+
+    // The knife has no ammo to report, and a zero next to it would read as
+    // being out of something.
+    if (hud.weapon == WeaponType::Knife) {
+        drawText(fb, kAmmoX, valueY + 4, "-", kValue, 2);
+    } else {
+        std::snprintf(buf, sizeof(buf), "%d", hud.ammo);
+        drawTextShadowed(fb, kAmmoX, valueY, buf,
+                         hud.ammo <= 5 ? kValueLow : kValue, kShadow, 2);
+    }
 }
 
 // --- full-screen states --------------------------------------------------
@@ -281,19 +312,27 @@ bool blink(double time) { return std::fmod(time, 1.0) < 0.55; }
 void renderTitleScreen(Framebuffer& fb, double time) {
     fb.clear(kTitleBg);
 
-    // A band behind the title, pulsing, so it is obvious at a glance that
-    // the loop is running even before anything else is on screen.
-    const int pulse = 22 + static_cast<int>(3.0 * std::sin(time * 2.0));
-    fb.fillRect(24, 44, kScreenW - 48, pulse, kTitleDim);
-    fb.fillRect(24, 44, kScreenW - 48, 2, kTitleFg);
-    fb.fillRect(24, 44 + pulse - 2, kScreenW - 48, 2, kTitleFg);
+    // A dark panel behind the title with bright rules top and bottom. The
+    // first version filled the panel with the same gold the title is drawn
+    // in, and the title vanished into it — a backing has to contrast with
+    // what it backs, which is obvious right up until you pick two colours
+    // from the same four-entry palette.
+    fb.fillRect(20, 34, kScreenW - 40, 72, kTitlePanel);
 
-    centred(fb, 50, "WOLF3D", kTitleFg, 3);
-    centred(fb, 78, "ARCADE", kTitleFg, 2);
-    centred(fb, 104, "A RAYCASTER WITH NO ASSET FILES", kTitleDim, 1);
+    // The rules pulse rather than the panel resizing. A panel that changes
+    // height moves the text inside it, and the title is the one thing on
+    // this screen that should sit still.
+    const double pulse = 0.62 + 0.38 * std::sin(time * 2.2);
+    const uint32_t rule = shade(kTitleFg, pulse);
+    fb.fillRect(20, 34, kScreenW - 40, 2, rule);
+    fb.fillRect(20, 104, kScreenW - 40, 2, rule);
 
-    if (blink(time)) centred(fb, 132, "PRESS ENTER", kValue, 1);
-    centred(fb, 152, "ESC TO QUIT", kTitleDim, 1);
+    centred(fb, 44, "WOLF3D", kTitleFg, 3);
+    centred(fb, 78, "ARCADE", kTitleDim, 2);
+    centred(fb, 118, "A RAYCASTER WITH NO ASSET FILES", kTitleDim, 1);
+
+    if (blink(time)) centred(fb, 142, "PRESS ENTER", kValue, 1);
+    centred(fb, 162, "ESC TO QUIT", kTitleDim, 1);
 }
 
 void renderDeathScreen(Framebuffer& fb, double time) {

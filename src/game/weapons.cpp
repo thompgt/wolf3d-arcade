@@ -47,7 +47,6 @@ void Weapons::reset() {
     cooldown_ = 0.0;
     animTimer_ = 0.0;
     frame_ = 0;
-    triggerWasDown_ = false;
     flash_ = 0.0;
     rng_ = 0x9E3779B9u;
 }
@@ -77,8 +76,8 @@ bool Weapons::select(WeaponType w, const Player& player) {
     return true;
 }
 
-ShotResult Weapons::update(double dt, bool triggerDown, Map& map,
-                           Player& player, Enemies& enemies) {
+ShotResult Weapons::update(double dt, bool triggerDown, bool triggerPressed,
+                           Map& map, Player& player, Enemies& enemies) {
     ShotResult out;
 
     if (cooldown_ > 0.0) cooldown_ -= dt;
@@ -97,16 +96,16 @@ ShotResult Weapons::update(double dt, bool triggerDown, Map& map,
         }
     }
 
-    const bool freshPress = triggerDown && !triggerWasDown_;
-    triggerWasDown_ = triggerDown;
-
-    const bool wantsToFire = t.automatic ? triggerDown : freshPress;
+    // An automatic weapon also honours the latch, so a tap too short to be
+    // held across a tick boundary still fires one round rather than nothing.
+    const bool wantsToFire = t.automatic ? (triggerDown || triggerPressed)
+                                         : triggerPressed;
     if (!wantsToFire || cooldown_ > 0.0 || player.isDead()) return out;
 
     if (t.ammoUse > 0 && player.ammo() < t.ammoUse) {
         // Out of ammo: report it once per press rather than every tick, so
         // the HUD click does not become a buzz.
-        out.dryFired = freshPress;
+        out.dryFired = triggerPressed;
         // Falling back to the knife automatically would take the decision
         // away from the player at the worst possible moment.
         return out;

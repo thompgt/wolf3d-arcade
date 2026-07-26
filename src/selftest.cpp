@@ -482,24 +482,32 @@ void testEnemies(Report& r) {
 
 // --- weapons -------------------------------------------------------------
 
-// Holds the trigger for a span of time. Weapons works out the press edge
-// itself, so a semi-automatic weapon held down here must still fire once.
+// Holds the trigger down for a span of time, modelling the platform exactly:
+// the key goes down once and stays down, so the latched press edge is set on
+// the first tick and on no other. A semi-automatic weapon must therefore
+// fire exactly one round no matter how long this runs.
 void holdTrigger(Weapons& w, Map& map, Player& p, Enemies& es,
                  double seconds, ShotResult* last = nullptr) {
     const int ticks = static_cast<int>(seconds / kTickDT);
     for (int i = 0; i < ticks; ++i) {
-        const ShotResult s = w.update(kTickDT, true, map, p, es);
+        const ShotResult s = w.update(kTickDT, true, i == 0, map, p, es);
         if (last && s.fired) *last = s;
     }
 }
 
 // Presses and releases the trigger repeatedly, which is what a player does
-// with a semi-automatic. Holding it down instead fires exactly one round,
-// by design, so any test that wants a burst out of the pistol needs this.
+// with a semi-automatic. The edge is latched on the tick the key goes down,
+// matching Platform::pressed().
 void pumpTrigger(Weapons& w, Map& map, Player& p, Enemies& es, double seconds) {
     const int ticks = static_cast<int>(seconds / kTickDT);
     for (int i = 0; i < ticks; ++i)
-        w.update(kTickDT, (i % 8) < 4, map, p, es);
+        w.update(kTickDT, (i % 8) < 4, (i % 8) == 0, map, p, es);
+}
+
+// One keystroke so brief it is never down when a tick samples it -- only the
+// latch records it. This is the case that used to drop the shot silently.
+ShotResult tapTrigger(Weapons& w, Map& map, Player& p, Enemies& es) {
+    return w.update(kTickDT, false, true, map, p, es);
 }
 
 // Rounds actually fired over a span, measured by ammo spent rather than by
@@ -597,6 +605,33 @@ void testWeapons(Report& r) {
         r.check(pistolShots == 1, "a held pistol fires exactly once");
         r.check(chainShots > 8, "a held chaingun keeps firing");
     }
+    {
+        // A keystroke shorter than a tick is never down when a tick samples
+        // it: only the platform's latched edge records it happened. Firing
+        // off the held state alone drops that shot silently, which is what
+        // driving the real game turned up.
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        Player p; p.spawn(40.5, 11.5, 3.14159265358979323846);
+        Weapons w; w.reset();
+
+        const int before = p.ammo();
+        r.check(tapTrigger(w, m, p, es).fired, "a tap between ticks still fires");
+        r.check(p.ammo() == before - 1, "and costs exactly one round");
+    }
+    {
+        // The same for an automatic weapon, which would otherwise need the
+        // key held across a tick boundary to do anything at all.
+        Map m = Map::level1();
+        Enemies es; es.spawnFrom(m);
+        Player p; p.spawn(40.5, 11.5, 3.14159265358979323846);
+        p.giveChaingun();
+        Weapons w; w.reset();
+        w.select(WeaponType::Chaingun, p);
+
+        r.check(tapTrigger(w, m, p, es).fired,
+                "a tapped chaingun fires one round too");
+    }
 
     r.section("firing");
     {
@@ -650,7 +685,7 @@ void testWeapons(Report& r) {
         Weapons w; w.reset();
         p.useAmmo(p.ammo());
 
-        const ShotResult s = w.update(kTickDT, true, m, p, es);
+        const ShotResult s = w.update(kTickDT, true, true, m, p, es);
         r.check(!s.fired, "an empty pistol does not fire");
         r.check(s.dryFired, "and says so");
         r.check(w.current() == WeaponType::Pistol,

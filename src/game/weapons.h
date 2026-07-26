@@ -60,11 +60,18 @@ public:
     bool select(WeaponType w, const Player& player);
     bool owns(WeaponType w, const Player& player) const;
 
-    // One tick. `triggerDown` is the held state; a semi-automatic weapon
-    // fires on the transition and an automatic one on the level, which is
-    // the whole difference between the pistol and the chaingun.
-    ShotResult update(double dt, bool triggerDown, Map& map, Player& player,
-                      Enemies& enemies);
+    // One tick.
+    //
+    // Both halves of the trigger are needed. `triggerDown` is the held
+    // state, which is what an automatic weapon runs on. `triggerPressed` is
+    // the platform's latched edge — a fresh press no tick has consumed yet —
+    // and a semi-automatic weapon has to use that rather than deriving its
+    // own edge from the held state: frames and ticks run at different rates,
+    // so a tap shorter than a tick is never down when a tick samples it, and
+    // deriving the edge here drops the shot entirely. The latch exists
+    // precisely so one keystroke produces exactly one action.
+    ShotResult update(double dt, bool triggerDown, bool triggerPressed,
+                      Map& map, Player& player, Enemies& enemies);
 
     // Animation frame of the current weapon; 0 is at rest.
     int frame() const { return frame_; }
@@ -82,7 +89,6 @@ private:
     double cooldown_   = 0.0;
     double animTimer_  = 0.0;
     int    frame_      = 0;
-    bool   triggerWasDown_ = false;
     double flash_      = 0.0;
 
     // Seeded, like the enemy AI: spread is random, and random spread from
