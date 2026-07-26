@@ -15,6 +15,14 @@ constexpr uint32_t rgb(uint8_t r, uint8_t g, uint8_t b) {
     return (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | b;
 }
 
+// Sprites need a "draw nothing here" value. The DIB format ignores the top
+// byte, so setting it marks a pixel transparent without colliding with any
+// real colour — in particular it leaves pure black usable, which a sentinel
+// like rgb(0,0,0) would not.
+constexpr uint32_t kTransparent = 0xFF000000u;
+
+constexpr bool isTransparent(uint32_t c) { return (c & 0xFF000000u) != 0; }
+
 // Scale a packed colour by a 0..1 factor. Used for distance shading and for
 // the darker side-wall tint that gives flat walls their sense of volume.
 uint32_t shade(uint32_t color, double factor);
