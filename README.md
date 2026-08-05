@@ -8,6 +8,14 @@ The only dependency is Win32 itself: the renderer draws into a 320x200
 32-bit buffer and blits it to the window with `StretchDIBits`, which is
 about as close as you can get today to how the original worked.
 
+## Tech Stack
+
+![C++](https://img.shields.io/badge/C++17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)
+![Win32 API](https://img.shields.io/badge/Win32_API-0078D6?style=for-the-badge&logo=windows&logoColor=white)
+![GDI](https://img.shields.io/badge/GDI-1E6FBA?style=for-the-badge)
+![MinGW-w64](https://img.shields.io/badge/MinGW--w64-2E7D32?style=for-the-badge)
+![GNU Make](https://img.shields.io/badge/GNU_Make-A42E2B?style=for-the-badge&logo=gnu&logoColor=white)
+
 > Status: **Phase 7 complete** — raycaster, procedural textures, doors and
 > secrets, billboard sprites, enemy AI, weapons and the HUD. Level 1 plays
 > start to finish: walk it, open doors, shove pushwalls, collect pickups,
