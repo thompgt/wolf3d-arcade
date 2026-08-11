@@ -1,0 +1,26 @@
+# Two sources had picked up UTF-8 BOMs while the other 46 had not. Nothing in
+# the toolchain minds, but it is a diff-noise and grep hazard, and "the file
+# looks identical but the first line does not match" is a bad afternoon.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cpp,h}]
+indent_style = space
+indent_size = 4
+max_line_length = 80
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+# Batch files are read by cmd.exe, which wants CRLF.
+[*.bat]
+end_of_line = crlf

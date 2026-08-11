@@ -1,4 +1,4 @@
-﻿#include "sprite_set.h"
+#include "sprite_set.h"
 
 #include <cmath>
 
