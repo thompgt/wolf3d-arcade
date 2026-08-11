@@ -512,6 +512,35 @@ void testEnemies(Report& r) {
         const int b = run();
         r.check(a == b, "the same scenario produces the same outcome");
     }
+
+    r.section("AI seeding");
+    {
+        // Determinism above must come from the seed, not from the rolls
+        // being fixed: the game seeds from the clock at startLevel() so that
+        // replaying a fight is not a replay of the same dice. Two different
+        // seeds over a long enough scenario have to diverge.
+        auto runSeeded = [](uint32_t seed) {
+            Map m = Map::level1();
+            Items items; items.spawnFrom(m);
+            Enemies es; es.spawnFrom(m, seed);
+            Player p; p.spawn(44.5, 11.5, 0.0);
+            stepAI(es, m, p, items, 6.0);
+            return p.health();
+        };
+        r.check(runSeeded(Enemies::kFixedSeed) == runSeeded(Enemies::kFixedSeed),
+                "the same seed replays exactly");
+
+        bool diverged = false;
+        for (uint32_t s = 1; s <= 12 && !diverged; ++s)
+            diverged = runSeeded(s * 2654435761u + 1u) !=
+                       runSeeded(Enemies::kFixedSeed);
+        r.check(diverged, "a different seed produces a different fight");
+
+        // Zero is xorshift's fixed point; seeding with it would make every
+        // roll zero forever, so it must fall back rather than be accepted.
+        r.check(runSeeded(0) == runSeeded(Enemies::kFixedSeed),
+                "a zero seed falls back to the fixed one");
+    }
 }
 
 // --- weapons -------------------------------------------------------------

@@ -50,7 +50,13 @@ struct ShotResult {
 
 class Weapons {
 public:
-    void reset();
+    // Seed for the spread generator. Defaulted so the self-test gets the same
+    // burst every run -- the whole point of those checks -- while the game
+    // seeds from the clock at startLevel(), so replaying a fight is not a
+    // replay of the same dice.
+    static constexpr uint32_t kFixedSeed = 0x9E3779B9u;
+
+    void reset(uint32_t seed = kFixedSeed);
 
     WeaponType current() const { return current_; }
 

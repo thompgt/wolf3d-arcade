@@ -71,7 +71,13 @@ struct Enemy {
 
 class Enemies {
 public:
-    void spawnFrom(const Map& map);
+    // Seed for the accuracy, pain-stagger and patrol-turn rolls. Defaulted so
+    // the self-test's scenarios stay reproducible; the game seeds from the
+    // clock at startLevel() so the same fight does not play out identically
+    // every replay.
+    static constexpr uint32_t kFixedSeed = 0x2545F491u;
+
+    void spawnFrom(const Map& map, uint32_t seed = kFixedSeed);
 
     // Steps every actor. Takes the map non-const because a chasing guard
     // opens doors on the way through.

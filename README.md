@@ -53,7 +53,7 @@ into the open:
   unobscured.
 - **Layering is load-bearing, not decorative.** `render/` never makes game
   decisions, `game/` never writes pixels, `platform/` is the only code that
-  includes `windows.h`. That boundary is what lets 158 headless assertions
+  includes `windows.h`. That boundary is what lets 161 headless assertions
   test doors, AI, hitscans and HUD layout with no window and no input at all.
 
 There is also a licensing lesson baked in. Wolfenstein 3D's art is
@@ -104,11 +104,13 @@ repository is self-contained by construction: clone it, build it, play it.
   noise propagation and distance-scaled hitscan accuracy.
 - Data-driven tuning tables: guard vs SS, and knife vs pistol vs machine gun
   vs chaingun, are rows of numbers rather than parallel implementations.
-- Seeded determinism throughout the AI and weapon spread, so a failing test
-  reproduces exactly instead of being flaky.
+- Explicitly seeded AI and weapon-spread generators: the self-test pins a
+  fixed seed so a failing check reproduces exactly instead of being flaky,
+  while the game seeds from the clock at `startLevel()` so replaying a fight
+  is not a replay of the same dice.
 - Raw Win32: window and message pump, `WM_INPUT` raw mouse for mouselook,
   high-resolution timing, `StretchDIBits` present.
-- A headless `--selftest` harness: 158 assertions over level, doors, locked
+- A headless `--selftest` harness: 161 assertions over level, doors, locked
   doors, secrets, raycasting, items, AI, hitscans, weapons, tallies, the face
   portrait and HUD text metrics.
 
@@ -364,7 +366,7 @@ unnoticed again.
 
 ### Headless self-test
 
-No window, no input — 158 assertions over the game logic:
+No window, no input — 161 assertions over the game logic:
 
 ```bat
 build\wolf3d.exe --selftest

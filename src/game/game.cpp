@@ -1,7 +1,9 @@
 #include "game.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 
 #include "../core/config.h"
 
@@ -39,6 +41,16 @@ constexpr uint32_t kMiniHunting = rgb(0xf0, 0x40, 0x40);  // chasing
 constexpr uint32_t kMiniFiring  = rgb(0xff, 0xf0, 0x60);  // shooting
 constexpr uint32_t kMiniCorpse  = rgb(0x60, 0x28, 0x28);
 
+// A seed that differs between runs and between levels within a run. The
+// steady clock's resolution is far finer than the gap between two starts, so
+// the low bits are the ones that vary; folding the high half in keeps them
+// from being thrown away.
+uint32_t clockSeed() {
+    const auto ticks = static_cast<uint64_t>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    return static_cast<uint32_t>(ticks) ^ static_cast<uint32_t>(ticks >> 32);
+}
+
 } // namespace
 
 void Game::init() {
@@ -58,9 +70,19 @@ void Game::startLevel() {
     // start from a fresh copy or the second run begins half-looted.
     map_ = Map::level1();
     items_.spawnFrom(map_);
-    enemies_.spawnFrom(map_);
+
+    // Both generators used to be re-seeded with a compile-time constant here,
+    // so every replay of the level produced the identical sequence of spread,
+    // accuracy, pain-stagger and patrol-turn rolls: the same fight played out
+    // the same way every time, and losing it taught you the script rather than
+    // the game. Seeded from the clock instead. The self-test does not go
+    // through startLevel(), so its fixed seeds -- and its determinism checks
+    // -- are untouched.
+    const uint32_t seed = clockSeed();
+    enemies_.spawnFrom(map_, seed);
     player_ = Player();
-    weapons_.reset();
+    // Split, so the two generators do not walk the same sequence in step.
+    weapons_.reset(seed * 2654435761u + 1u);
     bob_ = 0.0;
     hurt_timer_ = gloat_timer_ = 0.0;
     damage_flash_ = pickup_flash_ = 0.0;

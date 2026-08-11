@@ -75,10 +75,11 @@ double Enemies::nextRandom() {
     return rng_ / 4294967296.0;
 }
 
-void Enemies::spawnFrom(const Map& map) {
+void Enemies::spawnFrom(const Map& map, uint32_t seed) {
     enemies_.clear();
     killed_ = 0;
-    rng_ = 0x2545F491u;
+    // Zero is xorshift's fixed point; seeded with it nothing is ever random.
+    rng_ = seed ? seed : kFixedSeed;
 
     for (const Spawn& s : map.spawns()) {
         if (s.kind != SpawnKind::Guard && s.kind != SpawnKind::SS) continue;

@@ -42,13 +42,15 @@ double Weapons::nextRandom() {
     return rng_ / 4294967296.0;
 }
 
-void Weapons::reset() {
+void Weapons::reset(uint32_t seed) {
     current_  = WeaponType::Pistol;
     cooldown_ = 0.0;
     animTimer_ = 0.0;
     frame_ = 0;
     flash_ = 0.0;
-    rng_ = 0x9E3779B9u;
+    // xorshift is a fixed point at zero: seeded with it, every "random"
+    // number is zero forever.
+    rng_ = seed ? seed : kFixedSeed;
 }
 
 bool Weapons::owns(WeaponType w, const Player& player) const {
