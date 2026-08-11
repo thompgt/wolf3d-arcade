@@ -1,10 +1,13 @@
 #include "selftest.h"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "core/config.h"
 #include "game/enemy.h"
@@ -13,6 +16,10 @@
 #include "game/player.h"
 #include "game/weapons.h"
 #include "platform/win32_app.h"
+#include "core/bmp.h"
+#include "core/framebuffer.h"
+#include "render/sprite_set.h"
+#include "render/textures.h"
 #include "render/font.h"
 #include "render/hud.h"
 #include "render/raycast.h"
@@ -210,6 +217,197 @@ void testPushwallVsPlayer(Report& r) {
     step(m, 3.0, 39.5, 43.5);
     r.check(m.pushwalls().empty(), "it resumes once the way is clear");
     r.check(m.at(42, 43).kind == TileKind::Wall, "and settles two tiles east");
+}
+
+// --- the renderer --------------------------------------------------------
+
+// Order-sensitive hash of a whole frame. Used to compare two renders against
+// each other, never against a constant baked into this file: the pixel values
+// come out of floating-point projection, and a hash pinned here would be a
+// promise about the optimiser rather than about the renderer.
+uint64_t hashFrame(const Framebuffer& fb) {
+    uint64_t h = 1469598103934665603ull;               // FNV-1a offset basis
+    const uint32_t* px = fb.data();
+    const size_t n = static_cast<size_t>(fb.width()) * fb.height();
+    for (size_t i = 0; i < n; ++i) {
+        h ^= px[i];
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
+// The pose every check below renders from: the player's own spawn, facing
+// east down the cell-block corridor. Chosen because the level geometry there
+// is already pinned by the raycasting tests above -- the wall dead ahead is
+// exactly 11.5 tiles away -- so the depth buffer has a known right answer
+// rather than merely a reproducible one.
+Player fixedPose(const Map& m) {
+    Player p;
+    p.spawn(m.startX(), m.startY(), 0.0);
+    return p;
+}
+
+void testRenderer(Report& r) {
+    r.section("renderer");
+
+    Map m = Map::level1();
+    TextureSet textures; textures.generate();
+    Player p = fixedPose(m);
+
+    Framebuffer fb;
+    Raycaster caster;
+    caster.render(fb, m, p, textures);
+
+    // 1. Determinism. Nothing in a frame may depend on uninitialised memory,
+    //    on iteration order over a hash container, or on anything else that
+    //    varies run to run -- otherwise every check below is a coin flip and
+    //    a "visual regression" could be noise.
+    const uint64_t first = hashFrame(fb);
+    Framebuffer fb2;
+    Raycaster caster2;
+    caster2.render(fb2, m, fixedPose(m), textures);
+    r.check(hashFrame(fb2) == first, "the same pose renders identically");
+
+    // 2. It actually drew something. A renderer that early-returns leaves a
+    //    cleared buffer, and every structural check below would still pass.
+    {
+        int distinct = 0;
+        uint32_t seen[64];
+        for (int x = 0; x < kScreenW && distinct < 64; x += 7) {
+            const uint32_t c = fb.data()[static_cast<size_t>(kViewH / 2) *
+                                         kScreenW + x];
+            bool isNew = true;
+            for (int i = 0; i < distinct; ++i)
+                if (seen[i] == c) { isNew = false; break; }
+            if (isNew) seen[distinct++] = c;
+        }
+        r.check(distinct > 4, "the view has real texture detail, not one flat colour");
+    }
+
+    // 3. The depth buffer agrees with an independently cast ray. This is the
+    //    contract the sprite pass depends on: if these two ever disagree,
+    //    billboards clip against geometry that is not where they think.
+    {
+        const int centre = kScreenW / 2;
+        const double cameraX = 2.0 * centre / kScreenW - 1.0;
+        const RayHit hit = castRayDynamic(
+            m, p.x(), p.y(),
+            p.dirX() + p.planeX() * cameraX,
+            p.dirY() + p.planeY() * cameraX);
+        r.check(hit.hit, "the centre ray hits a wall");
+        r.near(caster.depth()[centre], hit.perpDist, 1e-9,
+               "depth buffer matches the ray cast independently");
+        // Pinned by the raycasting section above: from the spawn, facing
+        // east, the far wall of the cell block is 11.5 tiles away.
+        r.near(caster.depth()[centre], 11.5, 1e-9,
+               "and the known distance to the cell-block wall");
+    }
+
+    // 4. Every column has a usable depth, and none is nearer than the near
+    //    plane. A door slab or a pushwall grazing the camera used to yield a
+    //    near-zero distance, and kViewH divided by it overflowed the int
+    //    holding the column height.
+    {
+        bool allSane = true;
+        for (int x = 0; x < kScreenW; ++x) {
+            const double d = caster.depth()[x];
+            if (!(d >= 0.05) || !(d > 0.0)) { allSane = false; break; }
+        }
+        r.check(allSane, "no column is projected from inside the near plane");
+    }
+
+    // 5. The raycaster stays out of the status bar. It draws into the top
+    //    kViewH rows and the HUD owns the rest; overrunning is invisible in
+    //    a screenshot because the HUD is drawn afterwards and covers it.
+    {
+        bool statusUntouched = true;
+        for (int y = kViewH; y < kScreenH && statusUntouched; ++y)
+            for (int x = 0; x < kScreenW; ++x)
+                if (fb.data()[static_cast<size_t>(y) * kScreenW + x] != 0) {
+                    statusUntouched = false;
+                    break;
+                }
+        r.check(statusUntouched, "it never draws below the 3D viewport");
+    }
+
+    // 6. Billboard occlusion, which is the one piece of hidden-surface
+    //    removal in the project that had to be designed rather than falling
+    //    out of the column-by-column construction.
+    {
+        SpriteSet sprites; sprites.generate();
+
+        // Two paces ahead: well in front of the wall at 11.5 tiles.
+        std::vector<Billboard> infront{
+            {p.x() + 2.0, p.y(), &sprites[SprLamp]}};
+        Framebuffer near_;
+        Raycaster c3; c3.render(near_, m, p, textures);
+        renderBillboards(near_, p, c3.depth(), infront);
+
+        // The same object placed beyond the wall must be entirely hidden.
+        std::vector<Billboard> behind{
+            {p.x() + 20.0, p.y(), &sprites[SprLamp]}};
+        Framebuffer far_;
+        Raycaster c4; c4.render(far_, m, p, textures);
+        const uint64_t wallsOnly = hashFrame(far_);
+        renderBillboards(far_, p, c4.depth(), behind);
+
+        r.check(hashFrame(near_) != first,
+                "a sprite in front of the wall is drawn");
+        r.check(hashFrame(far_) == wallsOnly,
+                "and one behind it is clipped away entirely");
+    }
+}
+
+// The BMP dump is what makes any of the above reviewable by eye, and what
+// the README images are made with, so it gets checked too.
+void testBmp(Report& r) {
+    r.section("bmp dump");
+
+    Map m = Map::level1();
+    TextureSet textures; textures.generate();
+    Player p = fixedPose(m);
+    Framebuffer fb;
+    Raycaster caster;
+    caster.render(fb, m, p, textures);
+
+    const std::string path = exeRelativePath("selftest_frame.bmp");
+    r.check(writeBMP(path, fb), "writes a bitmap");
+
+    std::ifstream f(path, std::ios::binary);
+    r.check(static_cast<bool>(f), "and it can be reopened");
+    if (!f) return;
+
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(f)),
+                                     std::istreambuf_iterator<char>());
+
+    const auto u32 = [&bytes](size_t at) {
+        return static_cast<uint32_t>(bytes[at]) |
+               (static_cast<uint32_t>(bytes[at + 1]) << 8) |
+               (static_cast<uint32_t>(bytes[at + 2]) << 16) |
+               (static_cast<uint32_t>(bytes[at + 3]) << 24);
+    };
+
+    r.check(bytes.size() > 54, "the file has a header");
+    if (bytes.size() <= 54) return;
+
+    r.check(bytes[0] == 'B' && bytes[1] == 'M', "with the BM signature");
+    r.check(u32(18) == static_cast<uint32_t>(kScreenW), "the declared width");
+    r.check(u32(22) == static_cast<uint32_t>(kScreenH), "and height");
+
+    // 320 pixels at 24bpp is 960 bytes, already 4-byte aligned, so there is
+    // no row padding to account for at this resolution.
+    const size_t expected = 54 + static_cast<size_t>(kScreenW) * 3 * kScreenH;
+    r.check(bytes.size() == expected, "and exactly the right number of bytes");
+
+    // BMP rows run bottom-up, so the file's last row is the frame's first.
+    const uint32_t topLeft = fb.data()[0];
+    const size_t lastRow = 54 + static_cast<size_t>(kScreenW) * 3 * (kScreenH - 1);
+    r.check(bytes[lastRow + 2] == ((topLeft >> 16) & 0xFF) &&
+            bytes[lastRow + 1] == ((topLeft >> 8) & 0xFF) &&
+            bytes[lastRow + 0] == (topLeft & 0xFF),
+            "pixels survive the round trip, bottom-up and BGR");
+
+    std::remove(path.c_str());
 }
 
 // --- exit ----------------------------------------------------------------
@@ -956,6 +1154,8 @@ int runSelfTest() {
     testPushwallVsPlayer(r);
     testExit(r);
     testRays(r);
+    testRenderer(r);
+    testBmp(r);
     testItems(r);
     testEnemies(r);
     testWeapons(r);

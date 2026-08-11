@@ -4,6 +4,7 @@ CMakeCache.txt
 CMakeFiles/
 shot.bmp
 selftest.txt
+selftest_frame.bmp
 *.o
 *.d
 *.exe

@@ -1,5 +1,5 @@
 # The self-test is scriptable and returns an exit code, so there is no excuse
-# for 166 assertions regressing unnoticed. This also builds all three build
+# for 183 assertions regressing unnoticed. This also builds all three build
 # paths -- CMake, the Makefile and build.bat -- because two of them had
 # already drifted apart and nothing but a build would have caught it.
 name: CI
