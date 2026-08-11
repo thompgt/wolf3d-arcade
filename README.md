@@ -65,8 +65,9 @@ repository is self-contained by construction: clone it, build it, play it.
 - Modern C++17: value semantics, `std::array`/`std::vector` ownership,
   `unique_ptr` for a multi-megabyte object that cannot live on the stack,
   `constexpr` configuration, enum-class-driven state machines.
-- MinGW-w64 / GCC toolchain, built two ways: a `Makefile` with automatic
-  header-dependency tracking (`-MMD -MP`) and a make-free `build.bat`.
+- CMake as the source of truth for the build, with a `Makefile` (automatic
+  header-dependency tracking via `-MMD -MP`) and a make-free `build.bat` kept
+  as conveniences, and CI that builds all three so they cannot drift.
 - Built with `-Wall -Wextra -Wpedantic`; statically linked deliberately
   (`-static -static-libgcc -static-libstdc++`) because a dynamically linked
   MinGW binary trips Windows Defender heuristics and silently fails to launch.
@@ -322,7 +323,16 @@ spinning rather than as a ring of dots.
 
 ### Build
 
-The batch script needs nothing but `g++`:
+`CMakeLists.txt` is the source of truth for the build, and the only path that
+also works with MSVC or an IDE:
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure   # runs the headless self-test
+```
+
+The batch script is the make-free shortcut, and needs nothing but `g++`:
 
 ```bat
 build.bat          :: release -> build\wolf3d.exe
@@ -341,10 +351,12 @@ mingw32-make clean  # remove build/
 ```
 
 Release builds are `-O2 -DNDEBUG -mwindows`, so no console sits behind the
-game. Both build paths link `-static -static-libgcc -static-libstdc++`
-deliberately: a dynamically linked MinGW binary gets flagged by Windows
-Defender heuristics on some machines and silently fails to launch, and static
-linking makes `wolf3d.exe` portable on its own.
+game. All three build paths link `gdi32`, `user32` and `winmm`, and link
+`-static -static-libgcc -static-libstdc++` deliberately: a dynamically linked
+MinGW binary gets flagged by Windows Defender heuristics on some machines and
+silently fails to launch, and static linking makes `wolf3d.exe` portable on
+its own. CI builds all three on every push, so they cannot drift apart
+unnoticed again.
 
 ### Headless self-test
 

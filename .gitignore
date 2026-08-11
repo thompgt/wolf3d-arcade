@@ -1,4 +1,7 @@
 build/
+build-*/
+CMakeCache.txt
+CMakeFiles/
 shot.bmp
 selftest.txt
 *.o
