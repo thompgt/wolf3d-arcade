@@ -496,6 +496,54 @@ void testEnemies(Report& r) {
                 "gunfire does not carry through a wall");
     }
 
+    r.section("point-blank guards do not freeze");
+    {
+        // A guard closer than the chase stop distance, with a live fire
+        // timer, could neither advance nor shoot, and he has no melee. He
+        // used to stand perfectly inert, so cornering one made the most
+        // dangerous position in the game the safest. He must do *something*:
+        // give ground, or take the shot once the timer clears.
+        Map m = Map::level1();
+        Items items; items.spawnFrom(m);
+        Enemies es; es.spawnFrom(m);
+        const int i = enemyAt(es, 35, 11);
+
+        // Stand practically on top of him, facing back west at him.
+        Player p; p.spawn(es.all()[i].x + 0.45, es.all()[i].y,
+                          3.14159265358979323846);
+
+        // Run until he has taken his shot and is reloading. That is the
+        // state the bug lived in: too close to advance, unable to fire.
+        int ticks = 0;
+        while (es.all()[i].fireTimer <= 0.0 && ticks < 600) {
+            stepAI(es, m, p, items, kTickDT);
+            ++ticks;
+        }
+        r.check(es.all()[i].fireTimer > 0.0, "he fires, then starts reloading");
+
+        const double x0 = es.all()[i].x, y0 = es.all()[i].y;
+        const int    health0 = p.health();
+
+        // Step only while the reload is still running, so the outcome cannot
+        // be explained by him simply firing again.
+        int moving = 0;
+        for (int k = 0; k < 600 && es.all()[i].fireTimer > 0.0; ++k) {
+            stepAI(es, m, p, items, kTickDT);
+            ++moving;
+        }
+        r.check(moving > 1, "the reload spans more than a single tick");
+
+        const Enemy& e = es.all()[i];
+        const double moved = std::abs(e.x - x0) + std::abs(e.y - y0);
+
+        r.check(e.state != EnemyState::Stand && e.state != EnemyState::Path,
+                "he has noticed the player standing on top of him");
+        r.check(p.health() == health0,
+                "he cannot shoot while the timer runs");
+        r.check(moved > 1e-6,
+                "so he gives ground rather than standing perfectly inert");
+    }
+
     r.section("AI determinism");
     {
         // Two identical runs must agree exactly. A guard whose accuracy came

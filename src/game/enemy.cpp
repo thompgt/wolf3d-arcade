@@ -34,6 +34,12 @@ constexpr double kPainTime       = 0.22;
 // How long a guard holds a patrol heading before it may turn at a junction.
 constexpr double kPatrolRepick = 0.35;
 
+// A chasing guard closes no nearer than this, so he never ends up standing
+// inside the player. Inside it, with no shot available, he backs off at a
+// fraction of his chase speed rather than standing inert.
+constexpr double kPointBlank   = 0.9;
+constexpr double kBackOffSpeed = 0.6;
+
 const EnemyTuning kGuardTuning{
     /*health*/        25,
     /*patrolSpeed*/   1.1,
@@ -278,7 +284,19 @@ void Enemies::update(double dt, Map& map, Player& player, const Items& items) {
 
             // Close the distance, but stop short so a guard does not end up
             // standing inside the player.
-            if (dist > 0.9) moveToward(map, e, nx, ny, t.chaseSpeed * dt, items);
+            if (dist > kPointBlank) {
+                moveToward(map, e, nx, ny, t.chaseSpeed * dt, items);
+            } else if (sees && e.fireTimer > 0.0) {
+                // Point blank, still reloading, and he has no melee. He used
+                // to simply stand there -- neither advancing (too close) nor
+                // shooting (timer live) -- so cornering a guard froze him
+                // solid and turned the most dangerous position in the game
+                // into the safest. He gives ground instead, which reads as
+                // flinching back and puts him at a range he can shoot from
+                // when the timer runs out.
+                moveToward(map, e, -nx, -ny, t.chaseSpeed * kBackOffSpeed * dt,
+                           items);
+            }
 
             if (e.animTimer >= kWalkFrameTime) {
                 e.animTimer = 0.0;
