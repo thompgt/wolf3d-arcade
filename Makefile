@@ -18,7 +18,7 @@ LDFLAGS  :=
 
 # Static linking is required on this toolchain: a dynamically linked MinGW
 # binary trips Windows Defender heuristics and fails to launch.
-LDLIBS   := -static -static-libgcc -static-libstdc++ -lgdi32 -luser32
+LDLIBS   := -static -static-libgcc -static-libstdc++ -lgdi32 -luser32 -lwinmm
 
 ifeq ($(MAKECMDGOALS),debug)
   CXXFLAGS += -O0 -g -DWOLF_DEBUG

@@ -17,7 +17,7 @@ if not exist build mkdir build
 
 REM -static* is required here: dynamically linked MinGW output gets flagged
 REM by Windows Defender on this machine and refuses to run.
-set LIBS=-static -static-libgcc -static-libstdc++ -lgdi32 -luser32
+set LIBS=-static -static-libgcc -static-libstdc++ -lgdi32 -luser32 -lwinmm
 
 if /I "%~1"=="debug" (
     set FLAGS=-std=c++17 -Wall -Wextra -O0 -g -DWOLF_DEBUG

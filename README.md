@@ -43,10 +43,11 @@ into the open:
   the wall pass records a per-column depth and the sprite pass tests against
   it. Hidden-surface removal stops being a checkbox and becomes a decision.
 - **Simulation and rendering are different clocks.** The world steps at a
-  fixed 60Hz with an accumulator while frames go out as fast as the display
-  manages. That split — and the input latch that stops a keystroke falling
-  between two ticks — is the same problem every real-time system has, in
-  miniature and unobscured.
+  fixed 60Hz with an accumulator, and a pass that steps it zero times sleeps
+  out the rest of the tick rather than redrawing an identical frame. That
+  split — and the input latch that stops a keystroke falling between two
+  ticks — is the same problem every real-time system has, in miniature and
+  unobscured.
 - **Layering is load-bearing, not decorative.** `render/` never makes game
   decisions, `game/` never writes pixels, `platform/` is the only code that
   includes `windows.h`. That boundary is what lets 151 headless assertions
@@ -89,7 +90,8 @@ repository is self-contained by construction: clone it, build it, play it.
 
 **Systems and game programming**
 - Fixed-timestep accumulator loop decoupled from render rate, with a clamp so
-  a stalled window cannot fast-forward the world.
+  a stalled window cannot fast-forward the world, and frame pacing that sleeps
+  to the next tick boundary instead of busy-blitting duplicate frames.
 - Sticky, tick-consumed input edges — one keystroke produces exactly one
   action regardless of the frame-to-tick ratio.
 - Circle-vs-grid collision resolved one axis at a time, which is what makes
@@ -204,9 +206,9 @@ enemy type, four weapon view models, the face portraits — and loads level 1.
 ### The loop
 
 ```
-                 accumulator >= 1/60 ?
+                 accumulator >= 1/60 ?          ran no tick? sleep instead
    pump() ──► [ update(tick) ──► consumeEdges() ] ──► render() ──► present()
-   input          fixed-rate sim, repeated              once per frame
+   input          fixed-rate sim, repeated            once per simulated tick
 ```
 
 `pump()` drains the Win32 message queue and refreshes the input snapshot,
@@ -216,6 +218,12 @@ accumulator (clamped at 0.25s so a breakpoint cannot fast-forward the world),
 and the sim runs a whole number of 60Hz ticks. Each tick calls
 `consumeEdges()` afterwards, so one keystroke produces exactly one `pressed()`
 — never zero, dropped between ticks, and never two on a catch-up frame.
+
+A pass that ran no tick would draw a pixel-identical frame, and neither
+`pump()` nor `StretchDIBits` blocks, so it skips render and present and sleeps
+out the remainder of the tick instead. `init()` raises the scheduler's timer
+resolution to 1ms (`timeBeginPeriod`, hence `-lwinmm`) so that sleep lands
+where it is asked to rather than up to a quantum late.
 
 ### One simulation tick
 

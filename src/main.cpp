@@ -2,8 +2,10 @@
 //
 // The simulation runs on a fixed 60Hz timestep with an accumulator, so game
 // logic behaves identically no matter how fast the machine draws frames.
-// Rendering happens once per pass through the loop, at whatever rate the
-// display manages.
+// Rendering happens once per simulation tick: a pass that steps the world
+// zero times would draw a pixel-identical frame, so it sleeps out the rest of
+// the tick instead. That caps the loop at the 60Hz tick rate rather than
+// letting it spin as fast as GDI will accept blits.
 #include "core/bmp.h"
 #include "core/config.h"
 #include "core/framebuffer.h"
@@ -51,15 +53,29 @@ int main(int argc, char** argv) {
         // Sampled before the tick loop, which consumes input edges.
         const bool wantShot = platform.pressed(Key::Screenshot);
 
+        bool ticked = false;
         while (accumulator >= kTickDT) {
             game->update(platform);
             // One keystroke must produce one pressed() edge, even when this
             // loop catches up on several ticks at once.
             platform.consumeEdges();
             accumulator -= kTickDT;
+            ticked = true;
         }
 
         if (game->wantsQuit()) break;
+
+        // Nothing simulated since the last present, so the frame would be
+        // pixel-identical. Neither pump() nor StretchDIBits blocks, so without
+        // this the loop would redraw the same image hundreds of times a second
+        // and pin a core doing it. Sleep out the rest of the tick instead,
+        // leaving a millisecond of slack so we wake before the boundary rather
+        // than after it.
+        if (!ticked) {
+            const int ms = static_cast<int>((kTickDT - accumulator) * 1000.0) - 1;
+            platform.sleepMs(ms);
+            continue;
+        }
 
         game->render(fb);
 

@@ -60,6 +60,11 @@ public:
     // Seconds since init(), from a high-resolution timer.
     double now() const;
 
+    // Hands the rest of the millisecond back to the OS. init() raises the
+    // scheduler's timer resolution to 1ms, so this is accurate enough to pace
+    // a 60Hz loop instead of spinning a core on redundant frames.
+    void sleepMs(int ms) const;
+
 private:
     void* hwnd_ = nullptr;   // HWND, kept opaque to avoid leaking windows.h
     bool  down_[static_cast<int>(Key::Count)] = {};  // held now

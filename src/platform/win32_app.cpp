@@ -1,6 +1,7 @@
 #include "win32_app.h"
 
 #include <windows.h>
+#include <mmsystem.h>
 
 #include "../core/config.h"
 
@@ -90,6 +91,7 @@ BITMAPINFO makeBitmapInfo() {
 
 LARGE_INTEGER g_freq{};
 LARGE_INTEGER g_start{};
+bool g_timer_period = false;
 
 } // namespace
 
@@ -127,6 +129,11 @@ bool Platform::init(const char* title) {
     rid.hwndTarget  = hwnd;
     g_mouse_captured = RegisterRawInputDevices(&rid, 1, sizeof(rid)) == TRUE;
 
+    // Without this, Sleep(1) can overshoot by up to a full scheduler quantum
+    // (~15ms), which is most of a frame — the pacing in main() depends on it.
+    timeBeginPeriod(1);
+    g_timer_period = true;
+
     QueryPerformanceFrequency(&g_freq);
     QueryPerformanceCounter(&g_start);
     return true;
@@ -136,6 +143,10 @@ void Platform::shutdown() {
     if (hwnd_) {
         DestroyWindow(static_cast<HWND>(hwnd_));
         hwnd_ = nullptr;
+    }
+    if (g_timer_period) {
+        timeEndPeriod(1);
+        g_timer_period = false;
     }
 }
 
@@ -215,6 +226,10 @@ void Platform::present(const Framebuffer& fb) {
                   0, 0, kScreenW, kScreenH,
                   fb.data(), &bi, DIB_RGB_COLORS, SRCCOPY);
     ReleaseDC(hwnd, dc);
+}
+
+void Platform::sleepMs(int ms) const {
+    if (ms > 0) Sleep(static_cast<DWORD>(ms));
 }
 
 double Platform::now() const {
