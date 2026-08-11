@@ -8,6 +8,9 @@ raycaster with no engine, no game libraries, and no asset files.
 ![GDI](https://img.shields.io/badge/GDI-1E6FBA?style=for-the-badge)
 ![MinGW-w64](https://img.shields.io/badge/MinGW--w64-2E7D32?style=for-the-badge)
 ![GNU Make](https://img.shields.io/badge/GNU_Make-A42E2B?style=for-the-badge&logo=gnu&logoColor=white)
+![CMake](https://img.shields.io/badge/CMake-064F8C?style=for-the-badge&logo=cmake&logoColor=white)
+
+[![CI](https://github.com/thompgt/wolf3d-arcade/actions/workflows/ci.yml/badge.svg)](https://github.com/thompgt/wolf3d-arcade/actions/workflows/ci.yml)
 
 > Status: **Phase 7 complete** — raycaster, procedural textures, doors and
 > secrets, billboard sprites, enemy AI, weapons and the HUD. Level 1 plays
@@ -365,6 +368,12 @@ No window, no input — 158 assertions over the game logic:
 
 ```bat
 build\wolf3d.exe --selftest
+```
+
+or through ctest, which is what CI runs:
+
+```sh
+ctest --test-dir build --output-on-failure
 ```
 
 It prints a section-by-section report, writes the same text to

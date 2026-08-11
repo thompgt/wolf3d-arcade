@@ -1,0 +1,70 @@
+# The self-test is scriptable and returns an exit code, so there is no excuse
+# for 158 assertions regressing unnoticed. This also builds all three build
+# paths -- CMake, the Makefile and build.bat -- because two of them had
+# already drifted apart and nothing but a build would have caught it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and self-test (Windows, MinGW-w64 UCRT64)
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MSYS2 / UCRT64 toolchain
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-make
+
+      # CMake first: it is the source of truth for the build, and it is the
+      # configuration the self-test is run from.
+      - name: Configure (CMake, Release)
+        run: cmake -S . -B build-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (CMake, Release)
+        run: cmake --build build-cmake
+
+      - name: Self-test
+        run: ctest --test-dir build-cmake --output-on-failure
+
+      # The other two paths only have to compile and link. Building them here
+      # is what stops them quietly rotting.
+      - name: Build (Makefile)
+        run: mingw32-make
+
+      # build.bat is a cmd script, so it is run the way a user would run it,
+      # with the UCRT64 toolchain put on PATH first. `.\` because a bare name
+      # does not resolve when NoDefaultCurrentDirectoryInExePath is set.
+      - name: Build (build.bat)
+        shell: cmd
+        run: |
+          set PATH=${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin;%PATH%
+          .\build.bat
+
+      # The report is written beside the exe, so it is inside the CMake build
+      # directory rather than at the repo root.
+      - name: Upload the self-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-report
+          path: build-cmake/selftest.txt
+          if-no-files-found: warn
