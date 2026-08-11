@@ -65,6 +65,11 @@ public:
     // Seconds since init(), from a high-resolution timer.
     double now() const;
 
+    // Puts a message in front of the user. The release build is linked
+    // -mwindows and has no console, so anything printed to stderr goes
+    // nowhere — a failure the player needs to know about has to be shown.
+    static void showError(const char* title, const char* message);
+
     // Hands the rest of the millisecond back to the OS. init() raises the
     // scheduler's timer resolution to 1ms, so this is accurate enough to pace
     // a 60Hz loop instead of spinning a core on redundant frames.

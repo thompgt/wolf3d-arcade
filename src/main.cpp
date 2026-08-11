@@ -14,6 +14,7 @@
 #include "selftest.h"
 
 #include <cstring>
+#include <exception>
 #include <memory>
 
 using namespace wolf;
@@ -35,7 +36,16 @@ int main(int argc, char** argv) {
     // main blows the stack on entry and never reaches a line of this
     // function, including the --selftest branch above.
     auto game = std::make_unique<Game>();
-    game->init();
+    // Level parsing refuses to half-load: a ragged row or an unknown glyph
+    // throws rather than shifting the whole level sideways. There is no
+    // console behind the release build, so say so in a dialog and stop.
+    try {
+        game->init();
+    } catch (const std::exception& e) {
+        Platform::showError("Wolf3D Arcade", e.what());
+        platform.shutdown();
+        return 1;
+    }
 
     double previous    = platform.now();
     double accumulator = 0.0;

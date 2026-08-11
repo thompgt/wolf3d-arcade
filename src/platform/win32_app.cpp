@@ -232,6 +232,10 @@ void Platform::present(const Framebuffer& fb) {
     ReleaseDC(hwnd, dc);
 }
 
+void Platform::showError(const char* title, const char* message) {
+    MessageBoxA(nullptr, message, title, MB_OK | MB_ICONERROR);
+}
+
 void Platform::sleepMs(int ms) const {
     if (ms > 0) Sleep(static_cast<DWORD>(ms));
 }

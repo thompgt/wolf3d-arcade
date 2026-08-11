@@ -1,9 +1,10 @@
 #include "map.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
+#include <string>
 
 namespace wolf {
 namespace {
@@ -360,19 +361,30 @@ UseResult Map::use(double px, double py, double dirX, double dirY,
 }
 
 void Map::parse(const std::vector<std::string>& rows) {
+    // These were asserts, which both build scripts compile out with -DNDEBUG:
+    // the "refuse to load rather than half-load" contract held only in a debug
+    // build, and in the shipped one a short row read off the end of its string.
+    // They are always-on now, and the level data is a compile-time constant,
+    // so throwing here means the level source is wrong, not the player's input.
     h_ = static_cast<int>(rows.size());
-    assert(h_ > 0);
+    if (h_ != kLevelSize)
+        throw std::runtime_error("map: wrong number of rows");
+
     w_ = static_cast<int>(rows[0].size());
-    assert(w_ == kLevelSize && h_ == kLevelSize);
+    if (w_ != kLevelSize)
+        throw std::runtime_error("map: wrong row width");
 
     cells_.assign(static_cast<size_t>(w_) * h_, MapCell{});
 
     for (int y = 0; y < h_; ++y) {
         // A short or long row would silently shift the entire level, so it
         // is worth catching loudly at load rather than debugging visually.
-        assert(static_cast<int>(rows[y].size()) == w_);
+        if (static_cast<int>(rows[y].size()) != w_)
+            throw std::runtime_error("map: ragged row " + std::to_string(y));
         for (int x = 0; x < w_; ++x) {
-            const char c = rows[y][x];
+            // .at(), not [], so a bug in the bounds above surfaces as an
+            // exception rather than as a read past the end of the string.
+            const char c = rows[y].at(static_cast<size_t>(x));
             MapCell& cell = cells_[static_cast<size_t>(y) * w_ + x];
 
             uint8_t tex = TexBrick;
@@ -406,9 +418,12 @@ void Map::parse(const std::vector<std::string>& rows) {
                     start_x_ = x + 0.5;
                     start_y_ = y + 0.5;
                 }
-            } else {
-                assert(c == '.' && "unknown map glyph");
+            } else if (c == '.') {
                 cell.kind = TileKind::Empty;
+            } else {
+                throw std::runtime_error(
+                    std::string("map: unknown glyph '") + c + "' at row " +
+                    std::to_string(y) + " col " + std::to_string(x));
             }
         }
     }
