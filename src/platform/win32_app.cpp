@@ -151,7 +151,6 @@ void Platform::shutdown() {
 }
 
 bool Platform::pump() {
-    mouse_dx_ = 0;
     g_mouse_accum = 0;
 
     MSG msg;
@@ -159,7 +158,11 @@ bool Platform::pump() {
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
-    mouse_dx_ = g_mouse_accum;
+    // Accumulated, not assigned. Frames and ticks run at different rates, so
+    // overwriting here would throw away the motion from every pump that ran
+    // no tick, and replay the surviving one on each tick of a catch-up frame.
+    // consumeEdges() drains it, exactly as it does the keyboard edges.
+    mouse_dx_ += g_mouse_accum;
 
     // A key counts as down if it is still held, or if it was tapped at any
     // point since the last pump. vk() folds those two together so a fast
@@ -207,6 +210,7 @@ bool Platform::pump() {
 
 void Platform::consumeEdges() {
     for (bool& e : edge_) e = false;
+    mouse_dx_ = 0;
 }
 
 void Platform::present(const Framebuffer& fb) {

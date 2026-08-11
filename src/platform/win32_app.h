@@ -49,12 +49,17 @@ public:
     // consumes it is what makes every keystroke count.
     bool pressed(Key k) const { return edge_[static_cast<int>(k)]; }
 
-    // Clears the latched presses. Called by the loop after each tick, so one
-    // keystroke produces exactly one pressed() — never zero (dropped between
-    // ticks) and never two (a catch-up frame running several ticks).
+    // Clears the latched presses and the accumulated mouse delta. Called by
+    // the loop after each tick, so one keystroke produces exactly one
+    // pressed() — never zero (dropped between ticks) and never two (a
+    // catch-up frame running several ticks) — and every pixel of mouse motion
+    // is applied exactly once.
     void consumeEdges();
 
-    // Horizontal mouse delta in pixels since the last pump(), for mouselook.
+    // Horizontal mouse motion, in pixels, accumulated since the last tick
+    // consumed it — not since the last pump(). At 200fps against a 60Hz tick
+    // most pumps run no tick, so a per-pump delta would be mostly discarded
+    // and the surviving one re-applied on every tick of a catch-up frame.
     int mouseDX() const { return mouse_dx_; }
 
     // Seconds since init(), from a high-resolution timer.
