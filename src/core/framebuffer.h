@@ -39,9 +39,21 @@ class Framebuffer;
 void washRows(Framebuffer& fb, int rows, uint8_t r, uint8_t g, uint8_t b,
               double t);
 
+// Always kScreenW x kScreenH, and deliberately not resizable.
+//
+// It used to take a width and height, which promised a flexibility nothing
+// else honoured: every renderer loops over kScreenW/kViewH, the raycaster's
+// depth array is kScreenW long, and the DIB header handed to StretchDIBits
+// names the constants too. A buffer of any other size would have silently
+// mismatched the depth array and had its out-of-range writes swallowed by
+// put()'s bounds check -- a wrong picture, with nothing reported. The fixed
+// internal resolution is the point of the project, so the type says so.
 class Framebuffer {
 public:
-    Framebuffer(int w = kScreenW, int h = kScreenH);
+    Framebuffer();
+
+    static constexpr int kWidth  = kScreenW;
+    static constexpr int kHeight = kScreenH;
 
     int width()  const { return w_; }
     int height() const { return h_; }
@@ -62,8 +74,11 @@ public:
     void fillRect(int x, int y, int w, int h, uint32_t color);
 
 private:
-    int w_;
-    int h_;
+    // Kept as members rather than used directly from the constants so the
+    // bounds checks and the blit read the same numbers the buffer was
+    // actually allocated with.
+    int w_ = kWidth;
+    int h_ = kHeight;
     std::vector<uint32_t> pixels_;
 };
 

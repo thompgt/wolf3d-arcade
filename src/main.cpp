@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
     Platform platform;
     if (!platform.init("Wolf3D Arcade")) return 1;
 
-    Framebuffer fb(kScreenW, kScreenH);
+    Framebuffer fb;
 
     // On the heap, and it has to be. Game holds every generated sprite by
     // value -- the actor set alone is 98 frames of 64x64x4 -- which puts it

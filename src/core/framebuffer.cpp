@@ -40,8 +40,8 @@ void washRows(Framebuffer& fb, int rows, uint8_t r, uint8_t g, uint8_t b,
     }
 }
 
-Framebuffer::Framebuffer(int w, int h)
-    : w_(w), h_(h), pixels_(static_cast<size_t>(w) * h, 0) {}
+Framebuffer::Framebuffer()
+    : pixels_(static_cast<size_t>(kWidth) * kHeight, 0) {}
 
 void Framebuffer::clear(uint32_t color) {
     std::fill(pixels_.begin(), pixels_.end(), color);
