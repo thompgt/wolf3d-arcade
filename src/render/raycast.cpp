@@ -31,6 +31,15 @@ constexpr int kShadeBands = 16;
 // build for the same reason.
 constexpr double kSideDarken = 0.72;
 
+// Nothing may be projected from closer than this. The DDA's own hits cannot
+// be nearer than the player's collision radius, but a door slab or a moving
+// pushwall is not on the grid and is only required to be in front of the
+// camera: one grazing it yields a near-zero distance, and kViewH / that
+// overflows the int it is stored in, which is undefined behaviour rather
+// than merely a tall wall. The billboard pass has always clamped for the
+// same reason.
+constexpr double kNearPlane = 0.05;
+
 } // namespace
 
 double distanceShade(double dist) {
@@ -261,12 +270,16 @@ void Raycaster::render(Framebuffer& fb, const Map& map, const Player& player,
             continue;
         }
 
-        depth_[x] = hit.perpDist;
+        // Clamped before anything divides by it, and the clamped value is
+        // what the sprite pass depth-tests against, so walls and billboards
+        // keep agreeing about what is in front of what.
+        const double dist = std::max(hit.perpDist, kNearPlane);
+        depth_[x] = dist;
 
         // Projected wall height. Dividing the viewport height by distance is
         // the entire perspective transform: at one tile away a wall exactly
         // fills the view.
-        const int lineH = static_cast<int>(kViewH / hit.perpDist);
+        const int lineH = static_cast<int>(kViewH / dist);
         const int centre = kViewH / 2;
         const int y0 = centre - lineH / 2;
         const int y1 = y0 + lineH;
@@ -293,7 +306,7 @@ void Raycaster::render(Framebuffer& fb, const Map& map, const Player& player,
         const double step = static_cast<double>(kTexSize) / lineH;
         double texPos = (y0 < 0) ? -y0 * step : 0.0;
 
-        const double shadeF = bandedShade(hit.perpDist, hit.sideY);
+        const double shadeF = bandedShade(dist, hit.sideY);
         const int drawStart = std::max(y0, 0);
         const int drawEnd   = std::min(y1, kViewH);
 
