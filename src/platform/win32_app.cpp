@@ -232,6 +232,23 @@ void Platform::present(const Framebuffer& fb) {
     ReleaseDC(hwnd, dc);
 }
 
+std::string exeRelativePath(const char* filename) {
+    char buf[MAX_PATH] = {};
+    const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    // Nothing useful to fall back on but the working directory, which is the
+    // behaviour this function exists to replace -- but a broken path is worse
+    // than an awkward one.
+    if (n == 0 || n >= MAX_PATH) return filename;
+
+    std::string path(buf, n);
+    const size_t slash = path.find_last_of("\\/");
+    if (slash == std::string::npos) return filename;
+
+    path.resize(slash + 1);
+    path += filename;
+    return path;
+}
+
 void Platform::showError(const char* title, const char* message) {
     MessageBoxA(nullptr, message, title, MB_OK | MB_ICONERROR);
 }

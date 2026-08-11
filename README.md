@@ -285,8 +285,9 @@ where it is asked to rather than up to a quantum late.
    font defined in source. Then the minimap and texture-atlas overlays if
    toggled, and the death screen last of all, over everything.
 6. **Present.** The 320x200 buffer is scaled ×3 and blitted to the window with
-   `StretchDIBits`. `F12` dumps the framebuffer to `shot.bmp` after render and
-   before present, so it is exactly the frame the player is about to see —
+   `StretchDIBits`. `F12` dumps the framebuffer to `shot.bmp` beside the
+   executable, after render and before present, so it is exactly the frame the
+   player is about to see —
    necessary because compositor capture of a direct-blit window returns stale
    frames.
 
@@ -366,8 +367,9 @@ No window, no input — 158 assertions over the game logic:
 build\wolf3d.exe --selftest
 ```
 
-It prints a section-by-section report (see [selftest.txt](selftest.txt) for
-the current output) and returns non-zero if anything fails.
+It prints a section-by-section report, writes the same text to
+`selftest.txt` beside the executable, and returns non-zero if anything
+fails.
 
 ### Controls
 
@@ -383,7 +385,7 @@ the current output) and returns non-zero if anything fails.
 | `Esc` | Back to title (quits from the title screen) |
 | `M` | Debug: toggle top-down minimap |
 | `T` | Debug: cycle the flat atlas — walls, objects, guard facings, guard walk and fire, guard death and SS, weapons |
-| `F12` | Debug: write the current frame to `shot.bmp` |
+| `F12` | Debug: write the current frame to `shot.bmp` beside the exe |
 
 The pistol fires on each press; the machine gun and chaingun fire for as long
 as you hold the trigger. Weapon switching is gated on owning the weapon and

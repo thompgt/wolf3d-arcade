@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
 
     double previous    = platform.now();
     double accumulator = 0.0;
+    bool warnedAboutShot = false;
 
     while (platform.pump()) {
         const double current = platform.now();
@@ -90,8 +91,16 @@ int main(int argc, char** argv) {
         game->render(fb);
 
         // Dumped after render, before present, so it is exactly the frame
-        // the player is about to see.
-        if (wantShot) writeBMP("shot.bmp", fb);
+        // the player is about to see. Next to the exe rather than in the
+        // working directory, which from a shortcut is wherever the shortcut
+        // says and from an elevated shell is somewhere unwritable.
+        if (wantShot && !writeBMP(exeRelativePath("shot.bmp"), fb) &&
+            !warnedAboutShot) {
+            warnedAboutShot = true;   // once, not once per keypress
+            Platform::showError("Wolf3D Arcade",
+                                "Could not write shot.bmp next to the "
+                                "executable. Is the folder read-only?");
+        }
 
         platform.present(fb);
     }

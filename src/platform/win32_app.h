@@ -4,10 +4,21 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include "../core/framebuffer.h"
 
 namespace wolf {
+
+// Resolves `filename` against the directory holding the running executable.
+//
+// Everything this program writes -- the F12 screenshot, the self-test report
+// -- used to land in the process working directory, which is only the same
+// place as the exe when it was launched from a shell sitting there. From a
+// desktop shortcut it is the shortcut's "start in" folder; from an elevated
+// prompt it is C:\WINDOWS\system32, where the write fails outright. Next to
+// the binary is somewhere the user can actually find it.
+std::string exeRelativePath(const char* filename);
 
 // Logical actions the game reads, decoupled from physical scancodes so key
 // bindings can be remapped in one place.

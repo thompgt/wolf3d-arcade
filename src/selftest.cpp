@@ -12,6 +12,7 @@
 #include "game/map.h"
 #include "game/player.h"
 #include "game/weapons.h"
+#include "platform/win32_app.h"
 #include "render/font.h"
 #include "render/hud.h"
 #include "render/raycast.h"
@@ -892,9 +893,18 @@ int runSelfTest() {
     std::fflush(stdout);
 
     // The release build is a Windows-subsystem binary with no console, so
-    // the file is the only way to read results from a normal build.
-    std::ofstream f("selftest.txt");
-    if (f) f << text;
+    // the file is the only way to read results from a normal build. Written
+    // next to the exe: the working directory is wherever the launcher
+    // happened to be, which for an elevated shell is somewhere unwritable.
+    const std::string reportPath = exeRelativePath("selftest.txt");
+    std::ofstream f(reportPath);
+    if (f) {
+        f << text;
+    } else {
+        // Do not let a silent write failure look like a passing run.
+        std::fprintf(stderr, "could not write %s\n", reportPath.c_str());
+        std::fflush(stderr);
+    }
 
     return r.failed == 0 ? 0 : 1;
 }
