@@ -93,18 +93,36 @@ LARGE_INTEGER g_freq{};
 LARGE_INTEGER g_start{};
 bool g_timer_period = false;
 
+const char* const kWindowClass = "Wolf3DArcadeWindow";
+bool g_class_registered = false;
+
 } // namespace
 
 bool Platform::init(const char* title) {
     const HINSTANCE inst = GetModuleHandleA(nullptr);
 
+    // The window-procedure state outlives any one Platform, so init() has to
+    // clear it rather than assume it starts clean. Without this a second
+    // init() inherited the g_quit set by the first window's WM_DESTROY and
+    // the very next pump() returned false -- the loop exited before drawing
+    // a frame, with nothing to show for it.
+    g_quit = false;
+    for (bool& k : g_vk)     k = false;
+    for (bool& k : g_vk_hit) k = false;
+    g_mouse_accum = 0;
+
     WNDCLASSA wc{};
     wc.lpfnWndProc   = wndProc;
     wc.hInstance     = inst;
     wc.hCursor       = LoadCursorA(nullptr, IDC_ARROW);
-    wc.lpszClassName = "Wolf3DArcadeWindow";
+    wc.lpszClassName = kWindowClass;
     wc.style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    if (!RegisterClassA(&wc)) return false;
+    // Already registered means a previous init() ran and shutdown() has not
+    // unregistered it yet; that is fine and not a failure.
+    if (!RegisterClassA(&wc) &&
+        GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        return false;
+    g_class_registered = true;
 
     // Size the window so the *client area* is exactly the scaled buffer.
     RECT r{0, 0, kScreenW * kWindowScale, kScreenH * kWindowScale};
@@ -112,7 +130,7 @@ bool Platform::init(const char* title) {
     AdjustWindowRect(&r, style, FALSE);
 
     const HWND hwnd = CreateWindowExA(
-        0, wc.lpszClassName, title, style,
+        0, kWindowClass, title, style,
         CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top,
         nullptr, nullptr, inst, nullptr);
     if (!hwnd) return false;
@@ -143,6 +161,15 @@ void Platform::shutdown() {
     if (hwnd_) {
         DestroyWindow(static_cast<HWND>(hwnd_));
         hwnd_ = nullptr;
+        // DestroyWindow posts WM_DESTROY to our own wndProc, which sets
+        // g_quit. Leaving it set is what made a later init() quit instantly.
+        g_quit = false;
+    }
+    // The class outlived every window otherwise, so a process that shut the
+    // platform down and never restarted it still held the registration.
+    if (g_class_registered) {
+        UnregisterClassA(kWindowClass, GetModuleHandleA(nullptr));
+        g_class_registered = false;
     }
     if (g_timer_period) {
         timeEndPeriod(1);
