@@ -134,9 +134,10 @@ public:
 
     const std::vector<Pushwall>& pushwalls() const { return pushwalls_; }
 
-    // Animates doors and pushwalls. Needs the player position so a door
-    // never closes on top of them.
-    void update(double dt, double px, double py);
+    // Animates doors and pushwalls. Needs the player's position and collision
+    // radius: a door must never close on top of them, and a moving secret
+    // must not walk through them either.
+    void update(double dt, double px, double py, double pr);
 
     // Acts on whatever the player is facing, one cell ahead.
     UseResult use(double px, double py, double dirX, double dirY,

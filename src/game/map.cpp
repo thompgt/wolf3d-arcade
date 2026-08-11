@@ -108,6 +108,16 @@ const std::vector<std::string>& level1Rows() {
     return rows;
 }
 
+// Overlap between a one-cell box whose corner sits at (bx, by) and an actor
+// of radius r at (cx, cy). Shared by the player's collision test and the
+// pushwall's own advance check, so a secret stops in exactly the places the
+// player is stopped by it — the two disagreeing is what let a wall walk
+// through someone.
+bool boxOverlapsActor(double bx, double by, double cx, double cy, double r) {
+    return cx + r > bx && cx - r < bx + 1.0 &&
+           cy + r > by && cy - r < by + 1.0;
+}
+
 // Maps a wall glyph to its texture, or returns false if the glyph is not a
 // wall at all.
 bool wallTexture(char c, uint8_t& tex) {
@@ -198,15 +208,12 @@ bool Map::blocksMovement(int x, int y) const {
 }
 
 bool Map::hitsPushwall(double x, double y, double r) const {
-    for (const Pushwall& p : pushwalls_) {
-        if (x + r > p.x && x - r < p.x + 1.0 &&
-            y + r > p.y && y - r < p.y + 1.0)
-            return true;
-    }
+    for (const Pushwall& p : pushwalls_)
+        if (boxOverlapsActor(p.x, p.y, x, y, r)) return true;
     return false;
 }
 
-void Map::update(double dt, double px, double py) {
+void Map::update(double dt, double px, double py, double pr) {
     const int ptx = static_cast<int>(std::floor(px));
     const int pty = static_cast<int>(std::floor(py));
 
@@ -256,11 +263,23 @@ void Map::update(double dt, double px, double py) {
         // exactly the distance actually travelled. Stepping first and
         // reconstructing the origin afterwards is how a secret ends up
         // settling half a tile off the grid.
-        const double before = p.travelled;
-        p.travelled = std::min(p.travelled + kPushwallSpeed * dt, kPushwallDistance);
-        const double advanced = p.travelled - before;
-        p.x += p.dx * advanced;
-        p.y += p.dy * advanced;
+        const double before   = p.travelled;
+        const double target   = std::min(before + kPushwallSpeed * dt,
+                                         kPushwallDistance);
+        const double advanced = target - before;
+        const double nx = p.x + p.dx * advanced;
+        const double ny = p.y + p.dy * advanced;
+
+        // Collision only ever stopped the *player*, so a secret shoved into
+        // the corridor they are standing in used to overtake them and then
+        // mark the cell solid underneath — sealing them inside the wall for
+        // the rest of the level. The secret waits instead: it is stone, and
+        // stone does not walk through people.
+        if (boxOverlapsActor(nx, ny, px, py, pr)) { ++i; continue; }
+
+        p.travelled = target;
+        p.x = nx;
+        p.y = ny;
 
         if (p.travelled >= kPushwallDistance) {
             const int fx = static_cast<int>(std::lround(p.x));

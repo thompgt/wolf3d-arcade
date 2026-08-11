@@ -137,7 +137,7 @@ void Game::updatePlaying(const Platform& in) {
 
     // Animated after the player has moved, so a door never closes into the
     // cell they just stepped into.
-    map_.update(kTickDT, player_.x(), player_.y());
+    map_.update(kTickDT, player_.x(), player_.y(), player_.tuning().radius);
 
     // Weapons before the enemies, so a guard killed this tick does not also
     // get to take his shot.

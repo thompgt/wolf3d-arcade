@@ -45,9 +45,10 @@ struct Report {
 
 // Advances level state by a wall-clock duration at the real tick rate, so
 // the tests exercise the same stepping the game does.
-void step(Map& map, double seconds, double px, double py) {
+void step(Map& map, double seconds, double px, double py,
+          double pr = PlayerTuning{}.radius) {
     const int ticks = static_cast<int>(seconds / kTickDT);
-    for (int i = 0; i < ticks; ++i) map.update(kTickDT, px, py);
+    for (int i = 0; i < ticks; ++i) map.update(kTickDT, px, py, pr);
 }
 
 // --- level integrity -----------------------------------------------------
@@ -178,6 +179,36 @@ void testPushwalls(Report& r) {
             "settles exactly two tiles east");
     r.check(m.at(41, 43).kind == TileKind::Empty, "leaves a walkable gap behind");
     r.check(m.at(42, 43).tex == TexSteel, "keeps its own texture");
+}
+
+// A secret used to advance regardless of what was in its way. Player
+// collision only ever stopped the *player*, so a wall shoved into the tile
+// someone was standing in overtook them and then marked that tile solid,
+// sealing them inside it permanently. It must wait for them to step clear.
+void testPushwallVsPlayer(Report& r) {
+    r.section("a secret does not walk through the player");
+    Map m = Map::level1();
+
+    r.check(m.use(39.5, 43.5, 1.0, 0.0, false, false) == UseResult::PushwallMoved,
+            "secret shoved east");
+    const double startX = m.pushwalls()[0].x;
+
+    // Stand directly in its path, one tile east of where it started.
+    const double px = 41.5, py = 43.5;
+    step(m, 3.0, px, py);
+
+    r.check(!m.pushwalls().empty(), "it has not finished travelling");
+    r.check(m.pushwalls()[0].x < startX + 1.0,
+            "it stops short of the player rather than passing through");
+    r.check(!m.hitsPushwall(px, py, PlayerTuning{}.radius),
+            "and never overlaps them");
+    r.check(m.at(41, 43).kind == TileKind::Empty,
+            "the tile under the player is not marked solid");
+
+    // Step aside and it completes as normal.
+    step(m, 3.0, 39.5, 43.5);
+    r.check(m.pushwalls().empty(), "it resumes once the way is clear");
+    r.check(m.at(42, 43).kind == TileKind::Wall, "and settles two tiles east");
 }
 
 // --- exit ----------------------------------------------------------------
@@ -316,7 +347,7 @@ void stepAI(Enemies& es, Map& map, Player& p, const Items& items,
             double seconds) {
     const int ticks = static_cast<int>(seconds / kTickDT);
     for (int i = 0; i < ticks; ++i) {
-        map.update(kTickDT, p.x(), p.y());
+        map.update(kTickDT, p.x(), p.y(), p.tuning().radius);
         es.update(kTickDT, map, p, items);
     }
 }
@@ -844,6 +875,7 @@ int runSelfTest() {
     testDoors(r);
     testLockedDoors(r);
     testPushwalls(r);
+    testPushwallVsPlayer(r);
     testExit(r);
     testRays(r);
     testItems(r);
